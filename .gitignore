@@ -1,0 +1,30 @@
+# Python virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyTorch / Training checkpoints & logs
+checkpoints/
+*.pt
+*.pth
+runs/
+logs/
+
+# Data and manifests (keep raw dataset and generated manifests local)
+data/
+manifests/
+*.csv
+
+# OS generated files
+.DS_Store
+Thumbs.db
