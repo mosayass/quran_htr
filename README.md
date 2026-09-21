@@ -174,10 +174,90 @@ and confirm output shapes for both backbones on a dummy batch.
 
 ---
 
-## Next in this session (not yet built)
-3. **Vocabulary & CTC decoding** — freezing `vocab.json`, proper
-   greedy/beam CTC decode utilities, blank-token handling edge cases.
-4. **Training loop** — `nn.CTCLoss`, optimizer/scheduler, CER/WER
-   computation (Levenshtein-based), checkpointing, and the val loop.
+## 5. Vocabulary freezing & CTC decoding (`decode.py`)
 
-Say the word when you're ready for those.
+Freeze the vocab once, before any training run, and reuse the same
+`vocab.json` for every checkpoint from that run (index-to-character
+mapping must stay identical across train/resume/inference):
+
+```python
+from vocab import Vocabulary
+Vocabulary().save('/content/drive/MyDrive/quran_htr/vocab.json')
+```
+
+`decode.py` provides two vocabulary-aware decoders:
+- `greedy_decode(log_probs, vocab)` — fast best-path decode, used inside
+  `train.py`'s validation loop every epoch.
+- `beam_search_decode(log_probs, vocab, beam_width=10)` — prefix beam
+  search (no language model yet — that's a Step 2/3 addition once a
+  Quran-domain LM exists). Slower (O(T·beam_width·V) per sample); use it
+  for final evaluation or spot-checking specific lines, not every epoch.
+
+## 6. Training pipeline (`train.py`)
+
+```bash
+python train.py \
+    --train_manifest /content/manifests/train.csv \
+    --val_manifest /content/manifests/val.csv \
+    --vocab_path /content/drive/MyDrive/quran_htr/vocab.json \
+    --checkpoint_dir /content/drive/MyDrive/quran_htr/checkpoints \
+    --epochs 50 --batch_size 16
+```
+
+- Loss: `nn.CTCLoss(blank=vocab.blank_id, zero_infinity=True)` —
+  `zero_infinity=True` prevents NaN loss from propagating when an
+  occasional batch has `input_length < target_length` (shouldn't happen
+  with real KHATT lines, but protects a long unattended run from one bad
+  sample derailing training).
+- Optimizer: Adam, `ReduceLROnPlateau` scheduler on validation CER.
+- Gradient clipping (`--grad_clip`, default 5.0) — standard for
+  BiLSTM-based CTC models, prevents occasional exploding gradients.
+- Every epoch saves `checkpoint_dir/last.pt` (for resuming) and, when
+  validation CER improves, `checkpoint_dir/best.pt`. Both store model,
+  optimizer, and scheduler state plus epoch/best_cer, so
+  `--resume /path/last.pt` picks up exactly where training left off —
+  point `--checkpoint_dir` at a Drive folder and this survives a
+  disconnected Colab runtime.
+- `--max_steps` caps steps per epoch — for local smoke testing only
+  (see below), never for a real training run.
+
+## 7. Local testing before Colab (`smoke_test.py`)
+
+**Yes — test locally before starting any Colab run**, but with two
+different tiers, not one:
+
+**Tier 1 — `python smoke_test.py` (do this first, always).** Needs no
+dataset at all — it runs the model on random dummy tensors shaped
+exactly like `dataset.py`'s real batches, and checks: vocab save/load,
+forward pass shape for both backbones, `compute_output_seq_len()`
+consistency, a full forward→CTC loss→backward→optimizer step with no
+NaN/Inf, and that both decoders run and return the right count of
+strings. This catches the most common class of CTC bugs (input/target
+length mismatches, blank-id mismatches, shape errors) in seconds on CPU,
+before you've downloaded a single byte of KHATT. Run it now.
+
+**Tier 2 — a tiny real-data run, once you have *some* KHATT data local.**
+Build a manifest from 10–20 real line images
+(`build_manifest_from_image_label_dirs()` on a small local subset), then:
+
+```bash
+python train.py \
+    --train_manifest tiny_train.csv --val_manifest tiny_train.csv \
+    --vocab_path /tmp/vocab.json --checkpoint_dir /tmp/ckpt \
+    --epochs 2 --batch_size 4 --max_steps 3 --num_workers 0
+```
+
+This exercises the real `LineImageDataset` image-loading/preprocessing
+path (which Tier 1 deliberately skips) — confirms real KHATT images
+actually load, resize, and collate correctly, and that checkpoints
+actually get written — all in well under a minute on CPU. `--max_steps 3`
+keeps it fast; this run is not meant to produce a useful model.
+
+**What stays Colab-only:** the full training run (1.5) — real GPU time
+on the full manifest, all epochs, no `--max_steps` cap.
+
+## Next in this session (not yet built)
+- Run the real training (1.5) on Colab against the full KHATT manifest.
+- Sanity-check the resulting checkpoint (1.6) — spot-check decodes on
+  held-out lines, confirm CER is in a reasonable range — before moving
+  to Step 2 (Quran domain adaptation).
