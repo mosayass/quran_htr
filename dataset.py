@@ -23,6 +23,7 @@ not plugged into this Dataset class.
 
 from __future__ import annotations
 import csv
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
@@ -37,6 +38,40 @@ from vocab import Vocabulary
 TARGET_HEIGHT = 64      # fixed line-image height fed to the CNN
 WIDTH_MULTIPLE = 32      # pad final width to a multiple of this (stride alignment)
 MAX_WIDTH = 1600         # hard cap; KHATT lines rarely exceed ~1200px at h=64
+
+
+_TATWEEL = "\u0640"
+
+
+def normalize_text(text: str) -> str:
+    """
+    Normalize KHATT ground-truth transcriptions before they're written to
+    the manifest / encoded against vocab.py. Applied once here, at
+    manifest-build time, so every downstream consumer (LineImageDataset,
+    validate_manifest_against_vocab, train.py) sees already-clean text.
+
+    - Strip tatweel/kashida (U+0640): a stretching stroke, not a letter --
+      arbitrary-width, no fixed visual shape, adds CTC alignment noise
+      for no informational value.
+    - Strip '#': KHATT's own editorial/paragraph annotation marker, not
+      a written character -- no corresponding stroke exists on the page.
+    - Canonicalize ASCII ';' to Arabic '؛': KHATT annotators use them
+      interchangeably for what a writer treats as the same mark; keeping
+      both would ask the model to learn a distinction that isn't in the ink.
+    - Strip tashkeel/diacritics (U+064B-U+065F, U+0670): Step 1's vocab
+      excludes tashkeel by design (see vocab.py) -- diacritics like
+      tanween get added properly, as a full set, in Step 2, not patched
+      in reactively here. A real diacritic stroke does exist in the
+      image for these (unlike tatweel/'#'), so this is a small, accepted
+      image/label mismatch for Step 1 rather than a free normalization.
+    - Collapse resulting double spaces, strip leading/trailing whitespace.
+    """
+    text = text.replace(_TATWEEL, "")
+    text = text.replace("#", "")
+    text = text.replace(";", "؛")
+    text = re.sub(r"[\u064B-\u065F\u0670]", "", text)
+    text = re.sub(r" {2,}", " ", text).strip()
+    return text
 
 
 def build_manifest(
@@ -65,7 +100,7 @@ def build_manifest(
         txt_path = img_path.with_suffix(".txt")
         if not txt_path.exists():
             continue
-        text = txt_path.read_text(encoding=encoding).strip()
+        text = normalize_text(txt_path.read_text(encoding=encoding))
         if not text:
             continue
         rows.append((str(img_path), text))
@@ -107,7 +142,7 @@ def build_manifest_from_image_label_dirs(
         txt_path = labels_dir / img_path.relative_to(images_dir).with_suffix(".txt")
         if not txt_path.exists():
             continue
-        text = txt_path.read_text(encoding=encoding).strip()
+        text = normalize_text(txt_path.read_text(encoding=encoding))
         if not text:
             continue
         rows.append((str(img_path), text))

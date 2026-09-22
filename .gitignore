@@ -23,6 +23,8 @@ logs/
 # Data and manifests (keep raw dataset and generated manifests local)
 data/
 manifests/
+tiny_khatt/
+test_ckpt/
 *.csv
 
 # OS generated files
