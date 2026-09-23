@@ -36,7 +36,7 @@ from metrics import corpus_cer_wer
 
 
 def build_dataloaders(args, vocab: Vocabulary):
-    train_ds = LineImageDataset(args.train_manifest, vocab)
+    train_ds = LineImageDataset(args.train_manifest, vocab, augment=True)
     val_ds = LineImageDataset(args.val_manifest, vocab)
     train_loader = DataLoader(
         train_ds, batch_size=args.batch_size, shuffle=True,

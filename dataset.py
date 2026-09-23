@@ -32,12 +32,24 @@ import torch
 from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms.functional as TF
+from torchvision import transforms as T
 
 from vocab import Vocabulary
 
 TARGET_HEIGHT = 64      # fixed line-image height fed to the CNN
 WIDTH_MULTIPLE = 32      # pad final width to a multiple of this (stride alignment)
 MAX_WIDTH = 1600         # hard cap; KHATT lines rarely exceed ~1200px at h=64
+
+# Mild, train-only augmentation -- rotation/shear/translate jitter to
+# expose the model to writer-style variation beyond the raw dataset.
+# fill=255 = white background (image is still 0-255 grayscale here, pre-
+# normalization). Kept deliberately small: KHATT lines are tightly
+# cropped, so aggressive rotation/shear risks clipping strokes at the
+# image edges.
+_TRAIN_AUGMENT = T.RandomApply(
+    [T.RandomAffine(degrees=2, translate=(0.02, 0.02), shear=3, fill=255)],
+    p=0.5,
+)
 
 
 _TATWEEL = "\u0640"
@@ -71,8 +83,8 @@ def normalize_text(text: str) -> str:
     text = text.replace(";", "؛")
     text = text.replace("%", "")
     text = text.replace("«", "\"").replace("»", "\"")
-    text = text.replace("“", "\"").replace("”", "\"")
-    text = text.replace("…", "...")
+    text = text.replace("\u201c", "\"").replace("\u201d", "\"")
+    text = text.replace("\u2026", "...")
     # Strip stray mathematical / formatting symbols not part of handwriting vocab
     text = re.sub(r"[%/\\*+=<>\[\]{}~^&$@|]", "", text)
     text = re.sub(r"[\u064B-\u065F\u0670]", "", text)
@@ -164,6 +176,74 @@ def build_manifest_from_image_label_dirs(
     return len(rows)
 
 
+def split_manifest_by_text(
+    manifest_csv,
+    out_dir,
+    ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+    seed: int = 42,
+) -> Tuple[int, int, int]:
+    """
+    Group-aware train/val/test split, keyed on exact transcription text
+    rather than on individual rows/images.
+
+    KHATT writers each copy the same fixed prompt paragraphs (Para1-Para4
+    per the iraqyomar mirror's AHTD3A000N_ParaK_L.jpg naming), so many
+    rows across different writers share IDENTICAL transcription text. A
+    plain random row-level split lets the same sentence appear in train
+    (writer A) and test (writer B) -- the model is then evaluated on text
+    it has already memorized, just in a different hand. This produced the
+    confirmed bimodal CER: near-perfect on repeated fixed paragraphs,
+    collapse on genuinely unseen text. Grouping by text ensures every
+    occurrence of a given sentence, across every writer who copied it,
+    lands in exactly one split. Also correctly isolates "unique" (per
+    writer, non-repeated) paragraphs, since those form singleton groups.
+
+    Writes train.csv / val.csv / test.csv into out_dir. Returns the
+    (train, val, test) row counts actually written.
+    """
+    import random as _random
+
+    with open(manifest_csv, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        header = reader.fieldnames
+        rows = list(reader)
+
+    groups: dict = {}
+    for row in rows:
+        groups.setdefault(row["transcription"], []).append(row)
+
+    group_keys = list(groups.keys())
+    _random.Random(seed).shuffle(group_keys)
+
+    n_total = len(rows)
+    train_target = ratios[0] * n_total
+    val_target = (ratios[0] + ratios[1]) * n_total
+
+    train_rows, val_rows, test_rows = [], [], []
+    running = 0
+    for key in group_keys:
+        group_rows = groups[key]
+        if running < train_target:
+            train_rows.extend(group_rows)
+        elif running < val_target:
+            val_rows.extend(group_rows)
+        else:
+            test_rows.extend(group_rows)
+        running += len(group_rows)
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, split_rows in (("train", train_rows), ("val", val_rows), ("test", test_rows)):
+        with open(out_dir / f"{name}.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=header)
+            writer.writeheader()
+            writer.writerows(split_rows)
+
+    print(f"[split_manifest_by_text] {len(group_keys)} unique text groups -> "
+          f"train={len(train_rows)} val={len(val_rows)} test={len(test_rows)}")
+    return len(train_rows), len(val_rows), len(test_rows)
+
+
 def validate_manifest_against_vocab(manifest_csv, vocab: Vocabulary) -> None:
     """Run once after build_manifest() and before training — reports any
     transcriptions containing characters outside vocab.py's charset, so
@@ -183,10 +263,13 @@ def validate_manifest_against_vocab(manifest_csv, vocab: Vocabulary) -> None:
         print("[validate_manifest_against_vocab] all transcriptions are vocab-covered.")
 
 
-def _resize_pad(img: Image.Image) -> torch.Tensor:
-    """Grayscale -> resize to TARGET_HEIGHT preserving aspect ratio ->
-    right-pad width to a multiple of WIDTH_MULTIPLE -> normalize to [-1, 1]."""
+def _resize_pad(img: Image.Image, augment: bool = False) -> torch.Tensor:
+    """Grayscale -> [train-only mild affine jitter] -> resize to TARGET_HEIGHT
+    preserving aspect ratio -> right-pad width to a multiple of
+    WIDTH_MULTIPLE -> normalize to [-1, 1]."""
     img = img.convert("L")
+    if augment:
+        img = _TRAIN_AUGMENT(img)
     w, h = img.size
     new_w = max(1, round(w * (TARGET_HEIGHT / h)))
     new_w = min(new_w, MAX_WIDTH)
@@ -210,23 +293,14 @@ class Sample:
 
 
 class LineImageDataset(Dataset):
-    def __init__(self, manifest_csv, vocab: Vocabulary, max_target_len: int = 200, filter_oov: bool = True):
-        self.vocab = vocab
-        self.max_target_len = max_target_len
+    def __init__(self, manifest_csv, vocab: Vocabulary, max_target_len: int = 200, augment: bool = False):
         self.rows: List[Tuple[str, str]] = []
-        skipped = 0
         with open(manifest_csv, newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                img_path, text = row["image_path"], row["transcription"]
-                if filter_oov:
-                    try:
-                        self.vocab.encode(text[: self.max_target_len])
-                    except KeyError:
-                        skipped += 1
-                        continue
-                self.rows.append((img_path, text))
-        if skipped:
-            print(f"[LineImageDataset] Filtered {skipped} unencodable sample(s) from {manifest_csv}.")
+                self.rows.append((row["image_path"], row["transcription"]))
+        self.vocab = vocab
+        self.max_target_len = max_target_len
+        self.augment = augment
 
     def __len__(self) -> int:
         return len(self.rows)
@@ -234,7 +308,7 @@ class LineImageDataset(Dataset):
     def __getitem__(self, idx: int) -> Sample:
         img_path, text = self.rows[idx]
         img = Image.open(img_path)
-        image_tensor = _resize_pad(img)
+        image_tensor = _resize_pad(img, augment=self.augment)
         text = text[: self.max_target_len]
         target = torch.tensor(self.vocab.encode(text), dtype=torch.long)
         return Sample(image=image_tensor, target=target, text=text)
