@@ -84,6 +84,8 @@ def normalize_text(text: str) -> str:
     text = text.replace("%", "")
     text = text.replace("«", "\"").replace("»", "\"")
     text = text.replace("\u201c", "\"").replace("\u201d", "\"")
+    text = text.replace("\u2018", "'").replace("\u2019", "'")
+    text = text.replace("`", "'")
     text = text.replace("\u2026", "...")
     # Strip stray mathematical / formatting symbols not part of handwriting vocab
     text = re.sub(r"[%/\\*+=<>\[\]{}~^&$@|]", "", text)
@@ -293,14 +295,24 @@ class Sample:
 
 
 class LineImageDataset(Dataset):
-    def __init__(self, manifest_csv, vocab: Vocabulary, max_target_len: int = 200, augment: bool = False):
-        self.rows: List[Tuple[str, str]] = []
-        with open(manifest_csv, newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                self.rows.append((row["image_path"], row["transcription"]))
+    def __init__(self, manifest_csv, vocab: Vocabulary, max_target_len: int = 200, augment: bool = False, filter_oov: bool = True):
         self.vocab = vocab
         self.max_target_len = max_target_len
         self.augment = augment
+        self.rows: List[Tuple[str, str]] = []
+        skipped = 0
+        with open(manifest_csv, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                img_path, text = row["image_path"], row["transcription"]
+                if filter_oov:
+                    try:
+                        self.vocab.encode(text[: self.max_target_len])
+                    except KeyError:
+                        skipped += 1
+                        continue
+                self.rows.append((img_path, text))
+        if skipped:
+            print(f"[LineImageDataset] Filtered {skipped} unencodable sample(s) from {manifest_csv}.")
 
     def __len__(self) -> int:
         return len(self.rows)
