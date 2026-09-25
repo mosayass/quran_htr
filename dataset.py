@@ -246,6 +246,85 @@ def split_manifest_by_text(
     return len(train_rows), len(val_rows), len(test_rows)
 
 
+def split_manifest_by_writer(
+    manifest_csv,
+    out_dir,
+    ratios: Tuple[float, float, float] = (0.8, 0.1, 0.1),
+    seed: int = 42,
+) -> Tuple[int, int, int]:
+    """
+    Group-aware train/val/test split keyed on writer ID, not text.
+
+    This Kaggle KHATT mirror turned out to contain only 4 fixed
+    calibration paragraphs (Para1-Para4), copied by ~1,000 different
+    writers -- there is no free/unique text to hold out, so no split
+    keyed on transcription text (see split_manifest_by_text()) can ever
+    produce a genuinely unseen-sentence test set on this data: every
+    possible test sentence is necessarily one of the 4 sentences also
+    present in train, just written by someone else.
+
+    Splitting by writer instead asks a different, still-real question:
+    can the model read these same 4 sentences' characters/ligatures when
+    written by a hand it has never seen during training? That's genuine
+    handwriting-style generalization (not vocabulary generalization) --
+    and it's arguably closer to this project's actual downstream task
+    ("known Quran text + unknown handwriting") than open-vocabulary
+    reading would be anyway. Vocabulary breadth is Step 2's job (the
+    synthetic Tanzil corpus), not this dataset's.
+
+    Writer ID is taken as the token before the first '_' in the image
+    filename stem (e.g. "AHTD3A0001" from "AHTD3A0001_Para1_3.jpg") --
+    matches this mirror's naming convention. If you switch to a
+    differently-named KHATT mirror, verify this still extracts the
+    writer, not the paragraph or line number.
+
+    Writes train.csv / val.csv / test.csv into out_dir. Returns the
+    (train, val, test) row counts actually written.
+    """
+    import random as _random
+
+    with open(manifest_csv, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        header = reader.fieldnames
+        rows = list(reader)
+
+    groups: dict = {}
+    for row in rows:
+        writer_id = Path(row["image_path"]).stem.split("_")[0]
+        groups.setdefault(writer_id, []).append(row)
+
+    group_keys = list(groups.keys())
+    _random.Random(seed).shuffle(group_keys)
+
+    n_total = len(rows)
+    train_target = ratios[0] * n_total
+    val_target = (ratios[0] + ratios[1]) * n_total
+
+    train_rows, val_rows, test_rows = [], [], []
+    running = 0
+    for key in group_keys:
+        group_rows = groups[key]
+        if running < train_target:
+            train_rows.extend(group_rows)
+        elif running < val_target:
+            val_rows.extend(group_rows)
+        else:
+            test_rows.extend(group_rows)
+        running += len(group_rows)
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, split_rows in (("train", train_rows), ("val", val_rows), ("test", test_rows)):
+        with open(out_dir / f"{name}.csv", "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=header)
+            writer.writeheader()
+            writer.writerows(split_rows)
+
+    print(f"[split_manifest_by_writer] {len(group_keys)} writers -> "
+          f"train={len(train_rows)} val={len(val_rows)} test={len(test_rows)}")
+    return len(train_rows), len(val_rows), len(test_rows)
+
+
 def validate_manifest_against_vocab(manifest_csv, vocab: Vocabulary) -> None:
     """Run once after build_manifest() and before training — reports any
     transcriptions containing characters outside vocab.py's charset, so
@@ -295,7 +374,14 @@ class Sample:
 
 
 class LineImageDataset(Dataset):
-    def __init__(self, manifest_csv, vocab: Vocabulary, max_target_len: int = 200, augment: bool = False, filter_oov: bool = True):
+    def __init__(
+        self,
+        manifest_csv,
+        vocab: Vocabulary,
+        max_target_len: int = 200,
+        augment: bool = False,
+        filter_oov: bool = True,
+    ):
         self.vocab = vocab
         self.max_target_len = max_target_len
         self.augment = augment
