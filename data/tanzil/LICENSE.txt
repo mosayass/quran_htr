@@ -7,20 +7,17 @@ continuously monitored by a group of specialists in Tanzil Project.
 
 TERMS OF USE:
 
-- Permission is granted to copy and distribute verbatim copies of this text,
-  but CHANGING IT IS NOT ALLOWED.
+- Permission is granted to copy and distribute verbatim copies
+  of this text, but CHANGING IT IS NOT ALLOWED.
 
-- This Quran text can be used in any website or application, provided that its
-  source (Tanzil Project) is clearly indicated, and a link is made to
-  tanzil.net to enable users to keep track of changes.
+- This Quran text can be used in any website or application,
+  provided that its source (Tanzil Project) is clearly indicated,
+  and a link is made to tanzil.net to enable users to keep
+  track of changes.
 
-- This copyright notice shall be included in all verbatim copies of the text,
-  and shall be reproduced appropriately in all files derived from or containing
-  substantial portion of this text.
-
-- Source files are kept verbatim and unmodified. Any downstream normalization
-  (e.g., stripping tashkeel, tatweel removal, punctuation mapping) must be
-  performed in derived pipeline artifacts only.
+- This copyright notice shall be included in all verbatim copies
+  of the text, and shall be reproduced appropriately in all files
+  derived from or containing substantial portion of this text.
 
 Please check updates at: http://tanzil.net/updates/
-Official Documentation: http://tanzil.net/docs/Text_License
+See full license at: http://tanzil.net/docs/Text_License
