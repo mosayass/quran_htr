@@ -361,8 +361,8 @@ def _resize_pad(img: Image.Image, augment: bool = False) -> torch.Tensor:
 
     pad_w = (-new_w) % WIDTH_MULTIPLE
     if pad_w:
-        # pad value -1.0 == "white background" under this normalization
-        tensor = torch.nn.functional.pad(tensor, (0, pad_w), value=-1.0)
+        # pad value 1.0 == "white background" under [-1, 1] normalization (255 -> 1.0)
+        tensor = torch.nn.functional.pad(tensor, (0, pad_w), value=1.0)
     return tensor  # (1, TARGET_HEIGHT, new_w + pad_w)
 
 
@@ -417,7 +417,7 @@ def collate_fn(batch: List[Sample]):
     and concatenates targets flat (as nn.CTCLoss expects), along with
     per-sample raw pixel widths and target lengths."""
     max_w = max(s.image.shape[-1] for s in batch)
-    images = torch.full((len(batch), 1, TARGET_HEIGHT, max_w), -1.0)
+    images = torch.full((len(batch), 1, TARGET_HEIGHT, max_w), 1.0)
     input_lengths_px = []
     for i, s in enumerate(batch):
         w = s.image.shape[-1]

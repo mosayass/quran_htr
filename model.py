@@ -79,6 +79,9 @@ class _VGGLiteBackbone(nn.Module):
         return self.features(x)   # (B, 256, 2, W/4)
 
 
+VGGLiteBackbone = _VGGLiteBackbone
+
+
 def _make_mobilenetv3_small_backbone(in_channels: int = 1) -> nn.Module:
     from torchvision.models import mobilenet_v3_small
     m = mobilenet_v3_small(weights=None)

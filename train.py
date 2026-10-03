@@ -22,8 +22,16 @@ Resuming:
 
 from __future__ import annotations
 import argparse
+import sys
 import time
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 import torch
 from torch.utils.data import DataLoader
@@ -137,6 +145,8 @@ def main():
     p.add_argument("--vocab_path", required=True, help="frozen vocab.json (Vocabulary.save() output)")
     p.add_argument("--checkpoint_dir", required=True)
     p.add_argument("--backbone", default="vgg_lite", choices=["vgg_lite", "mobilenetv3_small"])
+    p.add_argument("--backbone_pretrained", default=None,
+                   help="path to pretrained CNN backbone weights (e.g. from AHCD pretrain_ahcd.py)")
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--batch_size", type=int, default=16)
     p.add_argument("--lr", type=float, default=3e-4)
@@ -154,8 +164,15 @@ def main():
     train_loader, val_loader = build_dataloaders(args, vocab)
 
     model = CRNN(vocab_size=len(vocab), backbone=args.backbone).to(device)
+    if args.backbone_pretrained and not args.resume:
+        ckpt_bb = torch.load(args.backbone_pretrained, map_location=device)
+        model.backbone.load_state_dict(ckpt_bb)
+        print(f"Loaded pretrained backbone weights from {args.backbone_pretrained}")
+
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-5
+    )
     ctc_loss = torch.nn.CTCLoss(blank=vocab.blank_id, zero_infinity=True)
 
     start_epoch, best_cer = 0, float("inf")
@@ -173,7 +190,8 @@ def main():
         )
         scheduler.step(val_cer)
 
-        print(f"[epoch {epoch+1}/{args.epochs}] "
+        curr_lr = optimizer.param_groups[0]["lr"]
+        print(f"[epoch {epoch+1}/{args.epochs}] lr={curr_lr:.2e} "
               f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
               f"val_CER={val_cer:.4f} val_WER={val_wer:.4f} "
               f"({time.time()-t0:.1f}s)")
