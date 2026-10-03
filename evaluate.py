@@ -7,7 +7,16 @@ and displays sample predictions side-by-side with ground truth.
 
 from __future__ import annotations
 import argparse
+import sys
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 import torch
 from torch.utils.data import DataLoader
 
