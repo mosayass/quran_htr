@@ -4,18 +4,22 @@ High-performance in-memory shard format & dataset for HTR line images.
 
 Features:
 1. Pre-resized 64px height uint8 line images with text labels.
-2. ShardDataset: loads entire split into RAM; padding/normalization is identical to dataset.py.
-3. Fast iteration benchmark measuring lines/sec.
-4. Shard writer utilities for synthetic generation and KHATT manifests.
+2. Contiguous array storage: All images in a shard/dataset are stored in a single
+   contiguous uint8 buffer (64, total_width) + offsets/widths arrays, minimizing
+   Python object overhead and avoiding copy-on-write memory bloat under multi-worker DataLoader.
+3. On-the-fly tensor-space affine augmentation for train shards:
+   rotation +-2deg, shear +-3deg, translation +-2% (fill=1.0 for white background).
+4. Fast iteration benchmark measuring lines/sec and RSS memory reporting.
 """
 
 from __future__ import annotations
-import csv
 import math
+import os
+import random
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Union, Optional
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -28,16 +32,16 @@ import numpy as np
 from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms as T
+import torchvision.transforms.functional as TF
 
 from vocab import Vocabulary
-from dataset import Sample, collate_fn, TARGET_HEIGHT, WIDTH_MULTIPLE, _TRAIN_AUGMENT
+from dataset import Sample, collate_fn, TARGET_HEIGHT, WIDTH_MULTIPLE
 
 
 class ShardDataset(Dataset):
     """
-    In-memory dataset loaded from pre-resized 64px uint8 shard files.
-    Padding to WIDTH_MULTIPLE and [-1, 1] normalization are identical to dataset.py.
+    High-performance in-memory dataset storing line images in a single contiguous
+    uint8 tensor (64, total_width) + int32 offsets and widths.
     """
     def __init__(
         self,
@@ -50,8 +54,6 @@ class ShardDataset(Dataset):
         self.vocab = vocab
         self.augment = augment
         self.max_target_len = max_target_len
-        self.images: List[torch.Tensor] = []  # List of (1, 64, W) uint8
-        self.texts: List[str] = []
 
         if isinstance(shard_paths, (str, Path)):
             p = Path(shard_paths)
@@ -62,7 +64,10 @@ class ShardDataset(Dataset):
         else:
             paths = sorted([Path(p) for p in shard_paths])
 
+        all_imgs: List[torch.Tensor] = []
+        all_txts: List[str] = []
         skipped = 0
+
         for p in paths:
             if not p.exists():
                 raise FileNotFoundError(f"Shard not found: {p}")
@@ -76,31 +81,68 @@ class ShardDataset(Dataset):
                     except KeyError:
                         skipped += 1
                         continue
-                self.images.append(img)
-                self.texts.append(text)
+                # Ensure 2D (64, W)
+                if img.dim() == 3 and img.shape[0] == 1:
+                    img = img.squeeze(0)
+                all_imgs.append(img)
+                all_txts.append(text)
 
         if skipped:
             print(f"[ShardDataset] Filtered {skipped} unencodable sample(s).")
 
+        self.num_samples = len(all_imgs)
+        self.texts = all_txts
+
+        # Pack into contiguous 2D array + offsets
+        if self.num_samples > 0:
+            widths_list = [img.shape[1] for img in all_imgs]
+            self.widths = torch.tensor(widths_list, dtype=torch.int32)
+            offsets_list = [0]
+            for w in widths_list[:-1]:
+                offsets_list.append(offsets_list[-1] + w)
+            self.offsets = torch.tensor(offsets_list, dtype=torch.int32)
+            # Single contiguous tensor: (64, total_width) uint8
+            self.buffer = torch.cat(all_imgs, dim=1).contiguous()
+        else:
+            self.buffer = torch.zeros((TARGET_HEIGHT, 0), dtype=torch.uint8)
+            self.offsets = torch.zeros(0, dtype=torch.int32)
+            self.widths = torch.zeros(0, dtype=torch.int32)
+
     def __len__(self) -> int:
-        return len(self.images)
+        return self.num_samples
 
     def __getitem__(self, idx: int) -> Sample:
-        img_u8 = self.images[idx]  # (1, 64, W) uint8
+        offset = int(self.offsets[idx])
+        w = int(self.widths[idx])
         text = self.texts[idx][: self.max_target_len]
 
-        if self.augment:
-            pil_img = Image.fromarray(img_u8[0].numpy())
-            pil_img = _TRAIN_AUGMENT(pil_img)
-            img_u8 = torch.from_numpy(np.array(pil_img)).unsqueeze(0)
+        # Slice 2D array: (64, W) -> unsqueeze to (1, 64, W)
+        img_u8 = self.buffer[:, offset : offset + w].unsqueeze(0)
 
-        # Padding & normalization identical to dataset.py _resize_pad:
-        # 1. Normalize [0, 255] uint8 -> [-1, 1] float
+        # Normalize [0, 255] uint8 -> [-1, 1] float
         tensor = (img_u8.float() / 255.0 - 0.5) / 0.5
-        w = tensor.shape[-1]
-        pad_w = (-w) % WIDTH_MULTIPLE
+
+        # On-the-fly tensor-space affine augmentation for train shards
+        if self.augment:
+            angle = random.uniform(-2.0, 2.0)
+            shear = random.uniform(-3.0, 3.0)
+            max_dx = 0.02 * w
+            max_dy = 0.02 * TARGET_HEIGHT
+            translate = [random.uniform(-max_dx, max_dx), random.uniform(-max_dy, max_dy)]
+            # fill=1.0 is white background in [-1, 1] space
+            tensor = TF.affine(
+                tensor,
+                angle=angle,
+                translate=translate,
+                scale=1.0,
+                shear=shear,
+                fill=1.0,
+            )
+
+        # Right-pad width to a multiple of WIDTH_MULTIPLE=32 with 1.0 (white background)
+        cur_w = tensor.shape[-1]
+        pad_w = (-cur_w) % WIDTH_MULTIPLE
         if pad_w:
-            # Pad value 1.0 corresponds to 255 (white background)
             tensor = torch.nn.functional.pad(tensor, (0, pad_w), value=1.0)
 
         target = torch.tensor(self.vocab.encode(text), dtype=torch.long)
@@ -109,8 +151,10 @@ class ShardDataset(Dataset):
 
 def write_shard_file(images: List[torch.Tensor], texts: List[str], out_path: Path):
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    # Ensure images are stored as uint8
+    u8_imgs = [img.squeeze(0).cpu().to(torch.uint8) if img.dim() == 3 else img.cpu().to(torch.uint8) for img in images]
     torch.save({
-        "images": images,
+        "images": u8_imgs,
         "texts": texts,
         "count": len(images),
     }, out_path)
@@ -122,10 +166,6 @@ def convert_manifest_to_shards(
     split_name: str,
     max_per_shard: int = 10000,
 ) -> List[Path]:
-    """
-    Reads a CSV manifest (image_path, transcription), resizes images to 64px height,
-    and writes them into uint8 .pt shard files.
-    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     shard_paths = []
@@ -149,8 +189,7 @@ def convert_manifest_to_shards(
             new_w = min(new_w, 1600)
             resized = img.resize((new_w, TARGET_HEIGHT), Image.BILINEAR)
             arr = np.array(resized, dtype=np.uint8)
-            img_tensor = torch.from_numpy(arr).unsqueeze(0)  # (1, 64, W)
-            shard_imgs.append(img_tensor)
+            shard_imgs.append(torch.from_numpy(arr))
             shard_txts.append(row["transcription"])
         except Exception as e:
             print(f"  [warn] Error loading {img_path}: {e}")
@@ -168,26 +207,8 @@ def convert_manifest_to_shards(
     return shard_paths
 
 
-def benchmark_shard_iteration(
-    shard_paths: List[Path],
-    vocab: Vocabulary,
-    batch_size: int = 16,
-    num_samples: int = 2000,
-) -> float:
-    """Measures and reports data loading iteration speed (lines/sec) over ShardDataset."""
-    ds = ShardDataset(shard_paths, vocab, augment=True)
-    loader = DataLoader(
-        ds, batch_size=batch_size, shuffle=True,
-        collate_fn=collate_fn, num_workers=0
-    )
-
-    t0 = time.time()
-    n_loaded = 0
-    for batch in loader:
-        n_loaded += len(batch["texts"])
-        if n_loaded >= num_samples:
-            break
-    elapsed = max(time.time() - t0, 1e-4)
-    speed = n_loaded / elapsed
-    print(f"[benchmark_shard_iteration] Loaded {n_loaded} lines in {elapsed:.2f}s ({speed:.1f} lines/sec)")
-    return speed
+def get_current_rss_mb() -> float:
+    """Returns current process RSS memory in MB."""
+    import psutil
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / (1024 * 1024)

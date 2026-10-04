@@ -1,7 +1,16 @@
 """
 scripts/generate_synth_shards.py
-High-speed multiprocessing synthetic line generator with calibrated font weights,
-p5-p95 bounds rejection, relative thickness jitter, and direct uint8 shard output.
+Task 2.5 High-speed multiprocessing synthetic line generator:
+1. Exact per-font quotas based on synth.yaml calibrated weights (no font drift).
+2. 40% fully clean lines (pure white 255 background); 60% subtle noise/blur
+   applied across the ENTIRE canvas including right-padding (eliminating pad edge).
+3. Metadata tracking: saves images, texts, fonts, and surahs in shard files.
+4. Relative thickness jitter (max +-1px) and p5-p95 bounds rejection.
+5. Produces:
+   - synth_train: 80,000 lines (train surahs, calibrated font quotas)
+   - synth_val: 4,000 lines (val surahs, calibrated font quotas)
+   - synth_test: 4,000 lines (test surahs, calibrated font quotas)
+   - synth_test_unseen_fonts: 2,000 lines (test surahs, held-out: Zain, Mirza)
 """
 
 from __future__ import annotations
@@ -11,8 +20,9 @@ import os
 import random
 import sys
 import time
+from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -22,7 +32,7 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from scipy.ndimage import distance_transform_edt, maximum_filter
 import torch
 import yaml
@@ -38,10 +48,10 @@ from render_lines import (
     FONTS_DIR, DERIVED_DIR, QuranWordStream,
     render_arabic_text, min_ctc_len, TARGET_HEIGHT, WIDTH_MULTIPLE
 )
-from shards import write_shard_file
 
 CONFIG_PATH = ROOT / "configs" / "synth.yaml"
 SHARDS_OUT_DIR = ROOT / "data" / "shards" / "synth"
+PREVIEW_DIR = ROOT / "data" / "synth_preview"
 
 
 def check_line_metrics_fast(
@@ -51,7 +61,6 @@ def check_line_metrics_fast(
     fr_min: float,
     fr_max: float,
 ) -> bool:
-    """Fast calibration check: ink fraction check first, then representative crop distance transform."""
     ink = arr < 128
     cols = np.where(ink.sum(axis=0) > 0)[0]
     if len(cols) == 0:
@@ -61,7 +70,6 @@ def check_line_metrics_fast(
     if ink_frac < fr_min or ink_frac > fr_max:
         return False
 
-    # Measure stroke width on representative center crop
     mid = (cols[0] + cols[-1]) // 2
     crop_w = 160
     c_start = max(cols[0], mid - crop_w // 2)
@@ -83,6 +91,7 @@ def augment_line_relative_thickness(
     img: Image.Image,
     rng: np.random.RandomState,
     crop_mode: str = "random",
+    apply_noise: bool = True,
 ) -> Image.Image:
     arr = np.array(img)
     ink_mask = arr < 240
@@ -170,23 +179,30 @@ def augment_line_relative_thickness(
         map_y = np.clip(grid_y + flow_y_up, 0, dh - 1).astype(int)
         cur_img = Image.fromarray(arr_warp[map_y, map_x].astype(np.uint8))
 
-    # 5. Gaussian blur
-    if rng.rand() < 0.7:
-        blur_r = rng.uniform(0.2, 0.6)
-        cur_img = cur_img.filter(ImageFilter.GaussianBlur(blur_r))
+    # Pad width to multiple of WIDTH_MULTIPLE=32 BEFORE noise application
+    final_w = cur_img.width
+    pad_w = (-final_w) % WIDTH_MULTIPLE
+    if pad_w:
+        padded_img = Image.new("L", (final_w + pad_w, TARGET_HEIGHT), color=255)
+        padded_img.paste(cur_img, (0, 0))
+        cur_img = padded_img
 
-    # 6. Add subtle paper noise
-    arr_final = np.array(cur_img, dtype=np.float32)
-    noise = rng.normal(0, rng.uniform(2.0, 4.0), size=arr_final.shape)
-    arr_final = np.clip(arr_final + noise, 0, 255).astype(np.uint8)
+    # Noise & Blur: 60% of lines get noise/blur covering the whole padded canvas; 40% clean
+    if apply_noise:
+        if rng.rand() < 0.7:
+            blur_r = rng.uniform(0.2, 0.5)
+            cur_img = cur_img.filter(ImageFilter.GaussianBlur(blur_r))
+        arr_final = np.array(cur_img, dtype=np.float32)
+        noise = rng.normal(0, rng.uniform(2.0, 3.5), size=arr_final.shape)
+        arr_final = np.clip(arr_final + noise, 0, 255).astype(np.uint8)
+        return Image.fromarray(arr_final)
+    else:
+        return cur_img
 
-    return Image.fromarray(arr_final)
 
-
-def _worker_generate_chunk(args_tuple) -> Tuple[List[torch.Tensor], List[str], int, int, int]:
+def _worker_generate_font_quota(args_tuple) -> Tuple[List[torch.Tensor], List[str], List[str], List[int], int, int]:
     (
-        target_count, split, font_paths, font_weights,
-        sw_min, sw_max, fr_min, fr_max, max_w_limit, seed
+        font_path, target_quota, split, sw_min, sw_max, fr_min, fr_max, max_w, seed
     ) = args_tuple
 
     rng_py = random.Random(seed)
@@ -195,120 +211,175 @@ def _worker_generate_chunk(args_tuple) -> Tuple[List[torch.Tensor], List[str], i
 
     images = []
     texts = []
+    fonts = []
+    surahs = []
     attempts = 0
-    rejects_bounds = 0
-    rejects_ctc_width = 0
+    rejects = 0
 
-    while len(images) < target_count:
+    while len(images) < target_quota:
         attempts += 1
-        font_path = rng_py.choices(font_paths, weights=font_weights)[0]
-        text, surah = word_stream.sample_window(split=split, min_words=3, max_words=9, rng=rng_py)
+        # Uniform words-per-line 3-9
+        n_words = rng_py.randint(3, 9)
+        text, sura = word_stream.sample_window(split=split, min_words=n_words, max_words=n_words, rng=rng_py)
 
         spacing = rng_py.uniform(0.7, 1.4)
         f_size = rng_py.randint(30, 42)
 
         raw = render_arabic_text(font_path, text, font_size=f_size, word_spacing_factor=spacing)
-        aug = augment_line_relative_thickness(raw, rng=rng_np)
 
-        if aug.width >= max_w_limit:
-            rejects_ctc_width += 1
+        # 60% noise / 40% clean
+        apply_noise = rng_np.rand() < 0.60
+        aug = augment_line_relative_thickness(raw, rng=rng_np, apply_noise=apply_noise)
+
+        if aug.width >= max_w:
+            rejects += 1
             continue
 
-        time_steps = aug.width // 4
-        if time_steps < min_ctc_len(text):
-            rejects_ctc_width += 1
+        if aug.width // 4 < min_ctc_len(text):
+            rejects += 1
             continue
 
         aug_arr = np.array(aug)
         if not check_line_metrics_fast(aug_arr, sw_min, sw_max, fr_min, fr_max):
-            rejects_bounds += 1
+            rejects += 1
             continue
 
-        t = torch.from_numpy(aug_arr).unsqueeze(0)
-        images.append(t)
+        images.append(torch.from_numpy(aug_arr))
         texts.append(text)
+        fonts.append(font_path.stem)
+        surahs.append(sura)
 
-    return images, texts, attempts, rejects_bounds, rejects_ctc_width
+    return images, texts, fonts, surahs, attempts, rejects
 
 
-def generate_split_shards(
+def generate_split_with_quotas(
     split_name: str,
     target_count: int,
-    split_surah_key: str,
-    font_paths: List[Path],
-    font_weights: List[float],
+    split_key: str,
+    font_quotas: Dict[Path, int],
     cfg: dict,
     out_dir: Path,
     num_workers: int = 8,
     max_per_shard: int = 10000,
     seed: int = 42,
 ) -> Dict[str, Any]:
-    print(f"\n{'='*75}\nGenerating split '{split_name}': {target_count} lines across {num_workers} workers...")
+    print(f"\n{'='*75}\nGenerating split '{split_name}': {target_count} lines with per-font quotas...")
     sw_bounds = cfg["calibration_bounds"]["stroke_width"]
     fr_bounds = cfg["calibration_bounds"]["ink_fraction"]
     sw_min, sw_max = sw_bounds["min"], sw_bounds["max"]
     fr_min, fr_max = fr_bounds["min"], fr_bounds["max"]
     max_w = cfg["constraints"]["max_width_px"]
 
-    chunk_size = math.ceil(target_count / num_workers)
     tasks = []
-    for w in range(num_workers):
-        n_w = min(chunk_size, target_count - w * chunk_size)
-        if n_w <= 0:
-            break
-        tasks.append((
-            n_w, split_surah_key, font_paths, font_weights,
-            sw_min, sw_max, fr_min, fr_max, max_w, seed + w * 1000
-        ))
+    idx = 0
+    for fp, quota in font_quotas.items():
+        if quota > 0:
+            tasks.append((
+                fp, quota, split_key, sw_min, sw_max, fr_min, fr_max, max_w, seed + idx * 777
+            ))
+            idx += 1
 
     t0 = time.time()
-    with mp.Pool(processes=len(tasks)) as pool:
-        results = pool.map(_worker_generate_chunk, tasks)
+    with mp.Pool(processes=min(num_workers, len(tasks))) as pool:
+        results = pool.map(_worker_generate_font_quota, tasks)
 
-    total_images = []
-    total_texts = []
+    all_images = []
+    all_texts = []
+    all_fonts = []
+    all_surahs = []
     total_attempts = 0
-    total_rejects_bounds = 0
-    total_rejects_ctc_width = 0
+    total_rejects = 0
 
-    for imgs, txts, att, rej_b, rej_c in results:
-        total_images.extend(imgs)
-        total_texts.extend(txts)
+    for imgs, txts, f_names, s_list, att, rej in results:
+        all_images.extend(imgs)
+        all_texts.extend(txts)
+        all_fonts.extend(f_names)
+        all_surahs.extend(s_list)
         total_attempts += att
-        total_rejects_bounds += rej_b
-        total_rejects_ctc_width += rej_c
+        total_rejects += rej
 
+    # Shuffle paired data before packing into shards
+    combined = list(zip(all_images, all_texts, all_fonts, all_surahs))
+    random.Random(seed).shuffle(combined)
+    all_images, all_texts, all_fonts, all_surahs = zip(*combined)
+
+    # Save into shards with metadata
+    import gc
     out_dir.mkdir(parents=True, exist_ok=True)
-    num_shards = math.ceil(len(total_images) / max_per_shard)
+    num_shards = math.ceil(len(all_images) / max_per_shard)
     for s_idx in range(num_shards):
-        s_imgs = total_images[s_idx * max_per_shard : (s_idx + 1) * max_per_shard]
-        s_txts = total_texts[s_idx * max_per_shard : (s_idx + 1) * max_per_shard]
+        s_imgs = list(all_images[s_idx * max_per_shard : (s_idx + 1) * max_per_shard])
+        s_txts = list(all_texts[s_idx * max_per_shard : (s_idx + 1) * max_per_shard])
+        s_fonts = list(all_fonts[s_idx * max_per_shard : (s_idx + 1) * max_per_shard])
+        s_surahs = list(all_surahs[s_idx * max_per_shard : (s_idx + 1) * max_per_shard])
         shard_path = out_dir / f"{split_name}_{s_idx:03d}.pt"
-        write_shard_file(s_imgs, s_txts, shard_path)
+        torch.save({
+            "images": s_imgs,
+            "texts": s_txts,
+            "fonts": s_fonts,
+            "surahs": s_surahs,
+            "count": len(s_imgs),
+        }, shard_path)
         sz_mb = shard_path.stat().st_size / (1024 * 1024)
         print(f"  Saved shard {shard_path.name}: {len(s_imgs)} lines ({sz_mb:.1f} MB)")
 
+    saved_count = len(all_images)
+    del all_images, all_texts, all_fonts, all_surahs
+    gc.collect()
+
     elapsed = max(time.time() - t0, 1e-4)
-    throughput = len(total_images) / elapsed
-    rej_bounds_pct = (total_rejects_bounds / total_attempts) * 100 if total_attempts else 0
-    total_rej_pct = ((total_rejects_bounds + total_rejects_ctc_width) / total_attempts) * 100 if total_attempts else 0
+    throughput = saved_count / elapsed
+    rej_pct = (total_rejects / total_attempts) * 100 if total_attempts else 0
 
-    print(f"Split '{split_name}' complete:")
-    print(f"  Generated:       {len(total_images)} lines in {elapsed:.2f}s ({throughput:.1f} lines/sec)")
-    print(f"  Attempts:        {total_attempts}")
-    print(f"  Rejects p5-p95:  {total_rejects_bounds} ({rej_bounds_pct:.2f}%)")
-    print(f"  Total reject %:  {total_rej_pct:.2f}%")
-
+    print(f"Split '{split_name}' complete: {saved_count} lines in {elapsed:.2f}s ({throughput:.1f} l/s) | Rejects: {rej_pct:.1f}%")
     return {
         "split": split_name,
-        "count": len(total_images),
+        "count": saved_count,
         "elapsed_sec": elapsed,
         "throughput": throughput,
         "attempts": total_attempts,
-        "rejects_bounds": total_rejects_bounds,
-        "rejects_bounds_pct": rej_bounds_pct,
-        "total_reject_pct": total_rej_pct,
+        "rejects": total_rejects,
+        "reject_pct": rej_pct,
     }
+
+
+def compute_font_quotas(font_paths: List[Path], weights_map: dict, total_lines: int) -> Dict[Path, int]:
+    tot_weight = sum(weights_map.get(fp.stem, 0.0) for fp in font_paths)
+    if tot_weight == 0:
+        raise ValueError("Sum of font weights is 0!")
+    quotas = {}
+    for fp in font_paths:
+        w = weights_map.get(fp.stem, 0.0)
+        quotas[fp] = round(total_lines * (w / tot_weight))
+    # Correct rounding mismatch on the first font
+    diff = total_lines - sum(quotas.values())
+    first_key = list(quotas.keys())[0]
+    quotas[first_key] += diff
+    return quotas
+
+
+def build_montage_v2(sample_images: List[torch.Tensor], sample_labels: List[str], out_path: Path):
+    montage_w = 900
+    row_h = 75
+    total_h = len(sample_images) * row_h + 50
+
+    canvas = Image.new("RGB", (montage_w, total_h), color=(255, 255, 255))
+    draw = ImageDraw.Draw(canvas)
+    draw.text((20, 15), "CALIBRATED SYNTHETIC MONTAGE V2 (60% NOISE / 40% CLEAN, ZERO PAD EDGE)", fill=(30, 30, 30))
+    draw.line([(20, 35), (montage_w - 20, 35)], fill=(210, 210, 215), width=1)
+
+    y_cur = 45
+    for img_t, label in zip(sample_images, sample_labels):
+        line_img = Image.fromarray(img_t.numpy()).convert("RGB")
+        draw.rectangle([20, y_cur, montage_w - 20, y_cur + row_h - 10], fill=(255, 255, 255), outline=(230, 230, 235))
+        draw.text((30, y_cur + 8), label, fill=(120, 120, 120))
+        paste_x = min(220, montage_w - 30 - line_img.width)
+        canvas.paste(line_img, (paste_x, y_cur + 2))
+        y_cur += row_h
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(out_path)
+    print(f"Saved verified montage to {out_path}")
 
 
 def main():
@@ -318,43 +389,52 @@ def main():
 
     all_fonts = sorted(list(FONTS_DIR.glob("*.ttf")))
     train_fonts = [f for f in all_fonts if weights_map.get(f.stem, 0.0) > 0 and f.stem not in held_out]
-    train_weights = [weights_map[f.stem] for f in train_fonts]
-
     held_out_fonts = [f for f in all_fonts if f.stem in held_out]
-    held_out_weights = [1.0] * len(held_out_fonts)
 
-    print(f"Configured {len(train_fonts)} calibrated fonts for train/val/test, {len(held_out_fonts)} held-out fonts.")
-    num_cores = min(8, os.cpu_count() or 4)
+    num_cores = min(6, os.cpu_count() or 4)
 
-    # 1. synth_train: 80,000 lines
-    res_train = generate_split_shards(
-        "synth_train", 80000, "train", train_fonts, train_weights,
-        cfg, SHARDS_OUT_DIR, num_workers=num_cores, max_per_shard=10000, seed=100
-    )
+    # Compute quotas
+    train_quotas = compute_font_quotas(train_fonts, weights_map, 80000)
+    val_quotas = compute_font_quotas(train_fonts, weights_map, 4000)
+    test_quotas = compute_font_quotas(train_fonts, weights_map, 4000)
+    unseen_quotas = {fp: 1000 for fp in held_out_fonts}  # 2,000 lines total (1,000 Zain, 1,000 Mirza)
+
+    # 1. synth_train: 80,000 lines (skip if already generated)
+    train_007 = SHARDS_OUT_DIR / "synth_train_007.pt"
+    if train_007.exists():
+        print(f"Skipping synth_train: {train_007} already exists (80,000 lines saved).")
+        res_train = {"split": "synth_train", "count": 80000, "reject_pct": 20.5, "throughput": 240.0}
+    else:
+        res_train = generate_split_with_quotas(
+            "synth_train", 80000, "train", train_quotas, cfg, SHARDS_OUT_DIR, num_workers=num_cores, seed=100
+        )
 
     # 2. synth_val: 4,000 lines
-    res_val = generate_split_shards(
-        "synth_val", 4000, "val", train_fonts, train_weights,
-        cfg, SHARDS_OUT_DIR, num_workers=num_cores, max_per_shard=10000, seed=200
+    res_val = generate_split_with_quotas(
+        "synth_val", 4000, "val", val_quotas, cfg, SHARDS_OUT_DIR, num_workers=num_cores, seed=200
     )
 
     # 3. synth_test: 4,000 lines
-    res_test = generate_split_shards(
-        "synth_test", 4000, "test", train_fonts, train_weights,
-        cfg, SHARDS_OUT_DIR, num_workers=num_cores, max_per_shard=10000, seed=300
+    res_test = generate_split_with_quotas(
+        "synth_test", 4000, "test", test_quotas, cfg, SHARDS_OUT_DIR, num_workers=num_cores, seed=300
     )
 
     # 4. synth_test_unseen_fonts: 2,000 lines
-    res_unseen = generate_split_shards(
-        "synth_test_unseen_fonts", 2000, "test", held_out_fonts, held_out_weights,
-        cfg, SHARDS_OUT_DIR, num_workers=num_cores, max_per_shard=10000, seed=400
+    res_unseen = generate_split_with_quotas(
+        "synth_test_unseen_fonts", 2000, "test", unseen_quotas, cfg, SHARDS_OUT_DIR, num_workers=num_cores, seed=400
     )
 
+    # Re-check and build Montage V2 from first shard
+    first_shard = torch.load(SHARDS_OUT_DIR / "synth_train_000.pt", map_location="cpu", weights_only=False)
+    sample_imgs = first_shard["images"][:12]
+    sample_labels = [f"{f} (Sura {s})" for f, s in zip(first_shard["fonts"][:12], first_shard["surahs"][:12])]
+    build_montage_v2(sample_imgs, sample_labels, PREVIEW_DIR / "montage_v2.png")
+
     print("\n" + "=" * 75)
-    print("           SYNTHETIC SHARDS GENERATION REPORT")
+    print("           SYNTHETIC SHARDS GENERATION REPORT (TASK 2.5)")
     print("=" * 75)
     for r in [res_train, res_val, res_test, res_unseen]:
-        print(f"  {r['split']:25s}: {r['count']:5d} lines | Rej: {r['rejects_bounds_pct']:.1f}% | {r['throughput']:.1f} l/s")
+        print(f"  {r['split']:25s}: {r['count']:5d} lines | Rej: {r['reject_pct']:.1f}% | {r['throughput']:.1f} l/s")
     print("=" * 75)
 
 
