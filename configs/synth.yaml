@@ -1,5 +1,5 @@
 # configs/synth.yaml
-# Synthetic Quranic line generation configuration
+# Synthetic Quranic line generation configuration (Task 2.4 Calibrated)
 
 # Word-stream window settings
 words_per_line:
@@ -12,27 +12,54 @@ constraints:
   max_width_px: 1500
   width_multiple: 32
 
+# Calibration bounds based on 2,000 KHATT train lines (p5 - p95)
+calibration_bounds:
+  stroke_width:
+    min: 2.000
+    max: 4.000
+  ink_fraction:
+    min: 0.043
+    max: 0.110
+
 # Font configuration
 fonts:
-  # Held-out fonts (evaluated separately or reserved)
+  # Held-out fonts (evaluated on unseen fonts test split)
   held_out:
-    - "Playpen_Sans_Arabic"
-    - "Gulzar"
-    - "Vibes"
+    - "Zain"
+    - "Mirza"
   default_weight: 1.0
-  # Per-font sampling weights (unspecified fonts use default_weight)
+  # Calibrated per-font sampling weights based on KHATT train percentiles
   weights:
-    Aref_Ruqaa: 1.5
-    Aref_Ruqaa_Ink: 1.5
-    Amiri: 1.2
-    Lateef: 1.3
-    Scheherazade_New: 1.2
+    Alkalami: 0.5
+    Amiri: 1.0
+    Aref_Ruqaa: 2.0
+    Aref_Ruqaa_Ink: 2.0
+    Badeen_Display: 0.0
+    Baloo_Bhaijaan_2: 1.0
+    Blaka: 0.0
+    Blaka_Ink: 0.0
+    Cairo_Play: 1.0
+    El_Messiri: 1.0
+    Gulzar: 1.0
+    Harmattan: 1.0
+    Jomhuria: 1.0
+    Katibeh: 1.0
+    Lalezar: 0.0
+    Lateef: 1.0
+    Lemonada: 0.5
+    Marhey: 2.0
+    Mirza: 0.0
+    Playpen_Sans_Arabic: 2.0
     Qahiri: 1.0
     Rakkas: 1.0
-    Katibeh: 1.1
-    Zain: 1.1
+    Reem_Kufi_Fun: 0.5
+    Reem_Kufi_Ink: 0.5
+    Ruwudu: 1.0
+    Scheherazade_New: 1.0
+    Vibes: 1.0
+    Zain: 0.0
 
-# Augmentation strengths (Augmentation v1)
+# Augmentation strengths (Augmentation v2 with relative thickness & p5-p95 rejection)
 augmentation:
   baseline_wobble:
     enabled: true
@@ -46,6 +73,8 @@ augmentation:
     max_shear: 0.15
   stroke_thickness:
     enabled: true
+    relative_to_font: true
+    max_delta_px: 1.0
     thicken_prob: 0.25
     thin_prob: 0.20
   elastic_warp:

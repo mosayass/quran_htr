@@ -25,7 +25,9 @@ data/
 manifests/
 tiny_khatt/
 test_ckpt/
+dist/
 *.csv
+*.zip
 
 # OS generated files
 .DS_Store

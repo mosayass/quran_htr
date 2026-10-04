@@ -3,10 +3,13 @@ train.py
 Step 1 & Step 2 training loop: CRNN + CTC on KHATT & Synthetic Quran lines.
 
 Features:
-- Configurable training input: single manifest (--train_manifest) or repeatable
-  weighted multi-manifest sampling (--mix MANIFEST:WEIGHT).
+- Configurable training input: single source (--train_manifest) or repeatable
+  weighted multi-source mixing (--mix MANIFEST:WEIGHT). Supports both CSV manifests
+  and in-memory uint8 .pt ShardDataset shards.
 - Model warm-start: --init_weights PATH loads model weights only, resetting
   optimizer, scheduler, and epoch (distinct from --resume).
+- Configurable epoch size: --samples_per_epoch (default 40,000) for fixed-step epochs.
+- Fine-tune defaults: lr 1e-4, patience 5, min_lr 1e-5.
 - Dual validation: reports both synthetic val (held-out surahs) and KHATT val
   (real ink, held-out writers) each epoch.
 - Dual checkpointing: saves best.pt on synthetic val CER and best_real.pt on KHATT val CER.
@@ -17,7 +20,7 @@ import argparse
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -27,31 +30,40 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 import torch
-from torch.utils.data import DataLoader, ConcatDataset, WeightedRandomSampler
+from torch.utils.data import DataLoader, ConcatDataset, WeightedRandomSampler, RandomSampler, Dataset
 
 from vocab import Vocabulary
 from dataset import LineImageDataset, collate_fn
 from model import CRNN, compute_output_seq_len
 from decode import greedy_decode
 from metrics import corpus_cer_wer
+from shards import ShardDataset
+
+
+def load_dataset_source(path_str: str, vocab: Vocabulary, augment: bool = False) -> Dataset:
+    """Loads either a ShardDataset (if path is a .pt file or directory with .pt files) or LineImageDataset."""
+    p = Path(path_str)
+    if p.suffix.lower() == ".pt" or (p.is_dir() and any(p.glob("*.pt"))):
+        return ShardDataset(p, vocab, augment=augment)
+    return LineImageDataset(path_str, vocab, augment=augment)
 
 
 def build_dataloaders(args, vocab: Vocabulary):
     # 1. Training loader
     if args.mix:
-        datasets: List[LineImageDataset] = []
+        datasets: List[Dataset] = []
         weights: List[float] = []
-        print("[build_dataloaders] Setting up weighted multi-manifest mixing:")
+        print("[build_dataloaders] Setting up weighted multi-source mixing:")
         for item in args.mix:
             if ":" not in item:
                 raise ValueError(
-                    f"Invalid --mix argument '{item}'. Format must be MANIFEST_PATH:WEIGHT (e.g. data/synth/train.csv:0.75)"
+                    f"Invalid --mix argument '{item}'. Format must be SOURCE_PATH:WEIGHT (e.g. data/shards/synth:0.75)"
                 )
             m_path, w_str = item.rsplit(":", 1)
             w = float(w_str)
-            ds = LineImageDataset(m_path, vocab, augment=True)
+            ds = load_dataset_source(m_path, vocab, augment=True)
             if len(ds) == 0:
-                print(f"  [warn] Manifest {m_path} has 0 samples; skipping.")
+                print(f"  [warn] Source {m_path} has 0 samples; skipping.")
                 continue
             datasets.append(ds)
             weights.append(w)
@@ -68,9 +80,10 @@ def build_dataloaders(args, vocab: Vocabulary):
             sample_weights.extend([per_sample_w] * len(ds))
 
         concat_ds = ConcatDataset(datasets)
+        num_samples = args.samples_per_epoch if args.samples_per_epoch is not None else len(concat_ds)
         sampler = WeightedRandomSampler(
             weights=torch.as_tensor(sample_weights, dtype=torch.double),
-            num_samples=len(concat_ds),
+            num_samples=num_samples,
             replacement=True,
         )
         train_loader = DataLoader(
@@ -83,21 +96,32 @@ def build_dataloaders(args, vocab: Vocabulary):
         )
     else:
         if not args.train_manifest:
-            raise ValueError("Either --train_manifest or repeatable --mix MANIFEST:WEIGHT must be specified.")
-        train_ds = LineImageDataset(args.train_manifest, vocab, augment=True)
-        train_loader = DataLoader(
-            train_ds,
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=args.num_workers,
-            collate_fn=collate_fn,
-            drop_last=True,
-        )
+            raise ValueError("Either --train_manifest or repeatable --mix SOURCE:WEIGHT must be specified.")
+        train_ds = load_dataset_source(args.train_manifest, vocab, augment=True)
+        if args.samples_per_epoch is not None:
+            sampler = RandomSampler(train_ds, replacement=True, num_samples=args.samples_per_epoch)
+            train_loader = DataLoader(
+                train_ds,
+                batch_size=args.batch_size,
+                sampler=sampler,
+                num_workers=args.num_workers,
+                collate_fn=collate_fn,
+                drop_last=True,
+            )
+        else:
+            train_loader = DataLoader(
+                train_ds,
+                batch_size=args.batch_size,
+                shuffle=True,
+                num_workers=args.num_workers,
+                collate_fn=collate_fn,
+                drop_last=True,
+            )
 
     # 2. Synthetic (primary) validation loader
     val_loader = None
     if args.val_manifest:
-        val_ds = LineImageDataset(args.val_manifest, vocab)
+        val_ds = load_dataset_source(args.val_manifest, vocab, augment=False)
         val_loader = DataLoader(
             val_ds,
             batch_size=args.batch_size,
@@ -109,7 +133,7 @@ def build_dataloaders(args, vocab: Vocabulary):
     # 3. Real-ink (KHATT) validation loader
     val_real_loader = None
     if args.val_real_manifest:
-        val_real_ds = LineImageDataset(args.val_real_manifest, vocab)
+        val_real_ds = load_dataset_source(args.val_real_manifest, vocab, augment=False)
         val_real_loader = DataLoader(
             val_real_ds,
             batch_size=args.batch_size,
@@ -202,11 +226,11 @@ def validate(model, loader, ctc_loss, vocab, device, max_steps=None):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--train_manifest", default=None, help="Path to single training manifest CSV")
+    p.add_argument("--train_manifest", default=None, help="Path to single training manifest CSV or shard")
     p.add_argument("--mix", action="append", default=None,
-                   help="Repeatable MANIFEST:WEIGHT for weighted sampling (e.g. --mix synth.csv:0.75 --mix khatt.csv:0.25)")
-    p.add_argument("--val_manifest", default=None, help="Synthetic / primary validation manifest CSV")
-    p.add_argument("--val_real_manifest", default=None, help="Real-ink (KHATT) validation manifest CSV")
+                   help="Repeatable SOURCE:WEIGHT for weighted sampling (e.g. --mix data/shards/synth:0.75 --mix data/shards/khatt:0.25)")
+    p.add_argument("--val_manifest", default=None, help="Synthetic / primary validation source (CSV or shard)")
+    p.add_argument("--val_real_manifest", default=None, help="Real-ink (KHATT) validation source (CSV or shard)")
     p.add_argument("--vocab_path", required=True, help="frozen vocab.json (Vocabulary.save() output)")
     p.add_argument("--checkpoint_dir", required=True)
     p.add_argument("--backbone", default="vgg_lite", choices=["vgg_lite", "mobilenetv3_small"])
@@ -214,9 +238,13 @@ def main():
                    help="Path to pretrained CNN backbone weights (e.g. ahcd_backbone.pt)")
     p.add_argument("--init_weights", default=None,
                    help="Path to checkpoint for model weights only (does NOT load optimizer, scheduler, or epoch)")
+    p.add_argument("--samples_per_epoch", type=int, default=40000,
+                   help="Number of lines sampled per epoch (default: 40000)")
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--batch_size", type=int, default=16)
-    p.add_argument("--lr", type=float, default=3e-4)
+    p.add_argument("--lr", type=float, default=1e-4, help="Fine-tuning default learning rate (1e-4)")
+    p.add_argument("--patience", type=int, default=5, help="ReduceLROnPlateau patience (default: 5)")
+    p.add_argument("--min_lr", type=float, default=1e-5, help="Minimum learning rate (default: 1e-5)")
     p.add_argument("--grad_clip", type=float, default=5.0)
     p.add_argument("--num_workers", type=int, default=2)
     p.add_argument("--resume", default=None, help="Checkpoint path to resume full state from")
@@ -245,7 +273,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-5
+        optimizer, mode="min", factor=0.5, patience=args.patience, min_lr=args.min_lr
     )
     ctc_loss = torch.nn.CTCLoss(blank=vocab.blank_id, zero_infinity=True)
 
@@ -271,7 +299,6 @@ def main():
             model, val_real_loader, ctc_loss, vocab, device, max_steps=args.max_steps
         ) if val_real_loader else (0.0, float("inf"), float("inf"), [])
 
-        # ReduceLROnPlateau steps on synthetic val CER
         if val_loader:
             scheduler.step(val_cer)
 
