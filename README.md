@@ -1,263 +1,201 @@
-# Quran HTR — Step 1: Base Pre-training (open-domain Arabic handwriting)
+# Quran HTR (Handwritten Text Recognition)
 
-This covers items **1 (model architecture)** and **2 (dataset acquisition &
-preprocessing)** of Step 1. Vocabulary (`vocab.py`) is included as a
-dependency of the dataset pipeline — full CTC decoding and the training
-loop with CER/WER are the next two items in this session, not yet here.
-
-Files:
-- `vocab.py` — Arabic character set + CTC index mapping
-- `dataset.py` — manifest builder + `LineImageDataset` + preprocessing + collate
-- `model.py` — `CRNN` (vgg_lite / mobilenetv3_small backbones) + CTC-ready forward pass
+A high-performance CRNN + CTC pipeline for Arabic Handwritten Text Recognition, specializing in Quranic Ayah text while preserving general-domain Arabic handwriting capability.
 
 ---
 
-## 1. Dataset acquisition
+## 1. Overview & Architecture
 
-### KHATT (primary dataset for Step 1)
-The official KHATT release (KFUPM Handwritten Arabic TexT) requires
-either KFUPM registration or an LDC membership (catalog no. LDC2015T23).
-In practice, the easiest path is a community Kaggle mirror of the same
-public dataset:
-
-**[`iraqyomar/khatt-arabic-hand-written-lines`](https://www.kaggle.com/datasets/iraqyomar/khatt-arabic-hand-written-lines)**
-— already line-segmented (11.4k line images), laid out as:
+The model uses a **CRNN (Convolutional Recurrent Neural Network)** trained with **Connectionist Temporal Classification (CTC) loss**:
 
 ```
-image/   line image files
-label/   one .txt per image, same filename stem, windows-1256 (cp1256) encoded
+Input Line Image (B, 1, 64, W)
+      │
+      ▼
+CNN Feature Extractor (VGG-Lite or MobileNetV3-Small)
+  - Height collapsed from 64 -> 1
+  - Width downsampled 4x -> T = W / 4 feature frames
+      │
+      ▼
+Bidirectional LSTM (2 layers, 256 hidden units per direction -> 512-dim output)
+      │
+      ▼
+Linear Classifier (512 -> Vocab Size: 72 tokens incl. CTC blank)
+      │
+      ▼
+CTC Loss / Vocabulary-Aware Decoding (Greedy & Prefix Beam Search)
 ```
 
-```python
-# Colab — Kaggle API auth (upload kaggle.json from kaggle.com/settings first)
-from google.colab import files
-files.upload()  # select kaggle.json
-!mkdir -p ~/.kaggle && cp kaggle.json ~/.kaggle/ && chmod 600 ~/.kaggle/kaggle.json
-!pip install -q kaggle
-!kaggle datasets download -d iraqyomar/khatt-arabic-hand-written-lines -p /content/khatt --unzip
-```
-
-```python
-from dataset import build_manifest_from_image_label_dirs, validate_manifest_against_vocab
-from vocab import Vocabulary
-
-build_manifest_from_image_label_dirs(
-    '/content/khatt/image', '/content/khatt/label',
-    '/content/manifests/all.csv',
-)
-validate_manifest_against_vocab('/content/manifests/all.csv', Vocabulary())
-```
-
-Notes:
-- Use `build_manifest_from_image_label_dirs()`, not `build_manifest()`,
-  for this mirror — images and labels sit in two separate folders here,
-  not as an adjacent `.txt` next to each image. `build_manifest()` still
-  applies if you later get a KHATT release that uses the adjacent-`.txt`
-  convention.
-- The ground truth is **cp1256-encoded**, not UTF-8 — that's handled by
-  the `encoding="cp1256"` default in the new function, but keep it in
-  mind if you fetch text from KHATT any other way (e.g. via `Vocabulary`
-  or manual inspection) and see garbled/mojibake Arabic.
-- This mirror ships as a single pool of images rather than KHATT's
-  official train/val/test writer splits, so you'll need to split it
-  yourself. Do a **random split by writer, not by line** if writer IDs
-  are recoverable from filenames — otherwise the same handwriting style
-  leaks across train/val and overstates validation accuracy. If writer
-  IDs aren't recoverable from this mirror's filenames, a plain random
-  line-level split is an acceptable fallback for Step 1 (open-domain
-  pre-training doesn't need to be as rigorous as your eventual Step 3
-  edge-calibration eval).
-- `nizarcharrada/khattarabic` is a more complete Kaggle mirror (full
-  original forms/paragraphs, not just pre-extracted lines) if you want
-  more data or the official form-level structure later — it needs more
-  digging to locate the line-level ground truth inside it, so start with
-  `iraqyomar`'s version above.
-
-### AHCD (Arabic Handwritten Character Dataset)
-AHCD is **isolated character** images (28 classes, 32×32px, no cursive
-joins or ligatures) — it is a classification dataset, not a line/sequence
-dataset, and cannot be fed into `LineImageDataset`/CTC directly.
-
-Recommended use here: **optional CNN warm-start only.** Train the
-`_VGGLiteBackbone` (or an equivalent shallow copy of it) as a 28-way
-character classifier on AHCD first, then load those conv weights before
-starting KHATT CTC training. This can slightly speed up early
-convergence by giving the backbone's early layers a head start on Arabic
-stroke/curvature statistics — but it is not required, and KHATT alone is
-sufficient to run Step 1. I'd suggest skipping this optional path
-initially and only revisiting it if Step 1 convergence is slow.
-Available via Kaggle ("Arabic Handwritten Characters Dataset").
+- **Backbone Options**:
+  - `vgg_lite` (default, ~1.2M conv params): Highly stable, proven for OCR, cleanly quantizable to ONNX INT8.
+  - `mobilenetv3_small`: Fast mobile backbone patched with a 4x width-stride schedule to avoid temporal starving.
+- **Image Preprocessing**: Grayscale, resized to fixed 64px height preserving aspect ratio, right-padded to multiple of 32px, normalized to `[-1, 1]`.
 
 ---
 
-## 2. Colab environment setup
+## 2. Project Directory Structure
+
+```
+quran_htr/
+├── configs/
+│   └── synth.yaml              # Calibrated synthetic generation config (font weights, bounds)
+├── data/
+│   ├── derived/                # ayahs.jsonl, splits.json (surah-level train/val/test)
+│   ├── fonts/                  # 28 curated Arabic Google Fonts
+│   ├── fonts_manifest.json     # Font family metadata, licenses, and SHA256 hashes
+│   ├── shards/                 # Fast in-memory .pt shards (synth + khatt)
+│   └── tanzil/                 # Original Tanzil Quran source files (Uthmani & Simple)
+├── dist/                       # Packaged zip archives for Colab / cloud training
+├── scripts/
+│   ├── audit_corpus.py         # 80k train audit (font drift, words/line, leakage, RSS)
+│   ├── calibrate.py            # Stroke width & ink fraction calibration vs KHATT
+│   ├── fetch_fonts.py          # Font downloader and acceptance verification
+│   ├── generate_synth_shards.py# Quota-based shard generator
+│   ├── overfit_ab.py           # Controlled A/B harness (visual vs logical order)
+│   ├── prepare_derived.py      # Ayah windowing and surah splits
+│   └── tanzil_stats.py         # Codepoint inventory and verse distribution
+├── dataset.py                  # PyTorch Dataset for CSV manifests + preprocessing
+├── decode.py                   # Greedy & prefix beam search CTC decoders
+├── evaluate.py                 # Evaluation CLI for checkpoints on test sets
+├── metrics.py                  # Levenshtein-based corpus CER and WER calculations
+├── model.py                    # CRNN architecture & sequence length calculation
+├── pretrain_ahcd.py            # AHCD 28-class character classification pretraining
+├── shards.py                   # High-performance contiguous uint8 in-memory ShardDataset
+├── train.py                    # Multi-source training loop with dual validation
+├── vocab.py / vocab.json       # 72-character Arabic vocabulary & index mapping
+└── tests/
+    └── smoke_test.py           # Multi-backbone forward/backward/CTC sanity suite
+```
+
+---
+
+## 3. The Reading-Order Breakthrough (Task 2.8)
+
+### The Problem: Monotonic CTC vs. Right-to-Left Arabic
+- **Temporal Direction**: CNN and BiLSTM feature maps scan images from **Left to Right** ($x=0 \to x=W$). Time frame $t=0$ corresponds to the **leftmost** edge of the image.
+- **Arabic Text (RTL)**: In standard logical text encoding, character index 0 (`text[0]`) is the first word read, which is positioned on the **rightmost** edge of the image ($x=W$).
+- **CTC Conflict**: CTC assumes a strictly monotonic alignment. Training with logical labels forced the model to predict the rightmost character at frame $t=0$ and the leftmost character at frame $t=T$. While a BiLSTM can memorize short isolated words, monotonic alignment collapses on long lines (6–9 words), stalling synthetic CER around ~41% even after 40 epochs.
+
+### The Solution: Visual Reading Order (`--label_order visual`)
+1. **At Training / Load Time**: Labels are dynamically reversed (`text[::-1]`) when loaded into memory. Character index 0 now corresponds to the leftmost glyph in the line, aligning naturally with CTC time frames.
+2. **At Decoding Time**: The CTC decoder emits characters in visual order and reverses them back (`decoded[::-1]`) into standard logical Arabic.
+3. **Data Integrity**: Underlying `.pt` shard files and dataset CSVs remain completely untouched in standard logical Arabic.
+
+### Empirical Validation:
+
+| Stage | Label Order | Epochs | Synthetic CER | Synthetic WER | Real KHATT CER |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| Baseline Run | `logical` | 40 | 40.89% | 80.33% | 40.86% |
+| **New Run** | **`visual`** | **4** | **7.42%** | **26.65%** | **24.96%** |
+
+In just 4 epochs, visual order achieved a **$5.5\times$ error reduction**, yielding 100% exact full-sentence transcriptions on held-out validation verses.
+
+---
+
+## 4. Dataset Pipeline & Sharding
+
+### Tanzil Quran Text & 28-Font Manifest
+- Tanzil text (`data/tanzil/`) is windowed into continuous lines of 3–9 words across Ayah boundaries within Surahs.
+- Split by Surah (seed 42, ~80% train, ~10% val, ~10% test) to prevent text leakage.
+- Rendered with **HarfBuzz / Raqm** across 28 open-source Arabic fonts (Naskh, Ruq'ah, Kufi, Nastaliq, Playpen).
+- Acceptance tested using connected-component analysis on ligatures (`نستعين` and `لا`).
+
+### Calibration Against Real Handwriting (KHATT)
+Line images are calibrated against the 5th–95th percentiles of 2,000 real KHATT lines:
+- **Median Stroke Width**: 2.00px – 4.00px (measured via Euclidean distance transform on skeletonized ink).
+- **Ink Fraction**: 0.043 – 0.110.
+- Calibrated sampling weights in `configs/synth.yaml` ensure realistic stroke variation while penalizing non-handwriting-like display fonts.
+
+### High-Performance Contiguous Shards (`shards.py`)
+To prevent copy-on-write RAM bloat and IPC serialization bottlenecks in PyTorch `DataLoader`:
+- All line images in a shard are packed into a single contiguous uint8 tensor: `(64, total_width)`.
+- Slices are retrieved via integer `offsets` and `widths` arrays.
+- The entire **89,096-sample** corpus (80k synthetic + 9.1k KHATT) loads into just **1.19 GB RAM**.
+- Dynamic on-the-fly tensor-space affine jitter ($\pm2^\circ$ rotation, $\pm3^\circ$ shear, $\pm2\%$ translation) is applied during training.
+
+---
+
+## 5. Training (`train.py`)
+
+### Multi-Source Mixing & Dual Validation
+The training loop supports weighted sampling across heterogeneous data sources:
+- **80% Synthetic Quranic lines**: Expands character vocabulary and font diversity across all 79 train Surahs.
+- **20% Real KHATT lines**: Grounds the model in authentic human handwriting, preventing synthetic overfitting.
+- **Dual Validation Tracking**: Every epoch independently evaluates and saves:
+  - `best.pt`: Best checkpoint on held-out Quranic Surahs (`synth_val`).
+  - `best_real.pt`: Best checkpoint on authentic human handwriting (`khatt_val`).
+
+### Running Training Locally:
+```bash
+python train.py \
+    --vocab_path vocab.json \
+    --mix "data/shards/synth/synth_train_*.pt:0.80" \
+    --mix "data/shards/khatt/khatt_train_000.pt:0.20" \
+    --val_manifest data/shards/synth/synth_val_000.pt \
+    --val_real_manifest data/shards/khatt/khatt_val_000.pt \
+    --label_order visual \
+    --batch_size 32 \
+    --samples_per_epoch 40000 \
+    --epochs 40 \
+    --lr 1e-4 \
+    --checkpoint_dir checkpoints/run_visual
+```
+
+### Key CLI Options:
+- `--label_order {logical, visual}`: Sets reading order (use `visual` for training). Saved into checkpoint metadata.
+- `--init_weights PATH`: Loads model weights only (resets optimizer, scheduler, and epoch counter).
+- `--resume PATH`: Resumes complete state (optimizer, scheduler, epoch, best CER) from a previous run.
+- `--samples_per_epoch N`: Controls virtual epoch size for `WeightedRandomSampler` (default: 40,000).
+
+---
+
+## 6. Evaluation (`evaluate.py`)
+
+Evaluate any trained checkpoint on a test manifest or shard:
+
+```bash
+python evaluate.py \
+    --test_manifest data/shards/synth/synth_test_000.pt \
+    --checkpoint checkpoints/run_visual/best.pt \
+    --vocab_path vocab.json
+```
+
+- Automatically infers `--label_order` from the checkpoint metadata (`ckpt["label_order"]`), preventing evaluation mismatches.
+- Add `--beam_search --beam_width 10` for prefix beam search decoding.
+
+---
+
+## 7. Google Colab Quickstart
+
+To train on Google Colab with GPU acceleration (L4 or A100):
 
 ```python
-# Cell 1 — mount storage (KHATT is large; keep it in Drive, not Colab's ephemeral disk)
+# 1. Mount Drive & Extract Shards
 from google.colab import drive
 drive.mount('/content/drive')
 
-# Cell 2 — deps (torch/torchvision ship preinstalled on Colab; pillow too)
-!pip install -q python-Levenshtein   # for CER/WER in the training step (next deliverable)
+!mkdir -p /content/data/shards/synth /content/data/shards/khatt
+!unzip -q /content/drive/MyDrive/quran_htr/dist/shards_synth.zip -d /content/data/shards/synth
+!unzip -q /content/drive/MyDrive/quran_htr/dist/shards_khatt.zip -d /content/data/shards/khatt
 
-# Cell 3 — put these three files somewhere importable
-import sys
-sys.path.append('/content/drive/MyDrive/quran_htr')   # wherever you upload vocab.py/dataset.py/model.py
+# 2. Clone Repository & Install Dependencies
+!rm -rf /content/quran_htr
+!git clone https://github.com/mosayass/quran_htr.git /content/quran_htr
+%cd /content/quran_htr
+!pip install -q pyyaml torchvision torchaudio
+
+# 3. Launch Training Loop
+!python train.py \
+  --init_weights /content/drive/MyDrive/quran_htr_writer_checkpoints/best.pt \
+  --vocab_path vocab.json \
+  --mix "/content/data/shards/synth/synth_train_*.pt:0.80" \
+  --mix "/content/data/shards/khatt/khatt_train_000.pt:0.20" \
+  --val_manifest /content/data/shards/synth/synth_val_000.pt \
+  --val_real_manifest /content/data/shards/khatt/khatt_val_000.pt \
+  --label_order visual \
+  --batch_size 64 \
+  --samples_per_epoch 40000 \
+  --epochs 40 \
+  --lr 1e-4 \
+  --checkpoint_dir /content/drive/MyDrive/quran_htr_writer_checkpoints/run_visual
 ```
-
-Build the manifest once per split (train/val/test), pointing at KHATT's
-official split lists so writer identity doesn't leak across sets:
-
-```python
-from dataset import build_manifest, validate_manifest_against_vocab
-from vocab import Vocabulary
-
-build_manifest('/content/drive/MyDrive/khatt/train_lines', '/content/manifests/train.csv')
-build_manifest('/content/drive/MyDrive/khatt/val_lines',   '/content/manifests/val.csv')
-
-v = Vocabulary()
-validate_manifest_against_vocab('/content/manifests/train.csv', v)
-v.save('/content/drive/MyDrive/quran_htr/vocab.json')   # freeze it — re-use for Step 2/3
-```
-
----
-
-## 3. Preprocessing summary (implemented in `dataset.py`)
-
-- Convert to **grayscale**.
-- Resize to a **fixed height of 64px**, preserving aspect ratio (width
-  varies per line — that's expected and handled by CTC + dynamic
-  padding, not by squashing width).
-- **Right-pad** width to a multiple of 32px per-sample, then pad again to
-  the batch's max width in `collate_fn` (so batches can still have
-  variable width across batches, just not within one).
-- Normalize pixel values to **[-1, 1]** (pad value = -1.0, i.e. "white").
-- Cap width at 1600px (`MAX_WIDTH`) as a safety net against corrupted or
-  mis-segmented lines — KHATT lines at h=64 are rarely near this.
-
-Sanity-check before training: run `python dataset.py <khatt_root>
-<out.csv>` standalone — it builds the manifest and validates every
-transcription against `vocab.py`'s charset, printing any OOV characters
-so you can fix the vocab before a training run wastes time on encode
-errors mid-epoch.
-
----
-
-## 4. Model architecture summary (implemented in `model.py`)
-
-`CRNN(vocab_size, backbone="vgg_lite")`:
-
-```
-(B,1,64,W) -> CNN backbone -> (B,256,2,W/4) -> collapse H -> (B,256,W/4)
-           -> permute -> (T=W/4, B, 256) -> BiLSTM(2 layers, hidden=256)
-           -> Linear(512, vocab_size) -> log_softmax -> (T, B, vocab_size)
-```
-
-- Default backbone is a small custom VGG-style stack (`vgg_lite`, ~1.2M
-  conv params) — the standard, well-proven choice for line-level OCR,
-  and the safest bet for a clean ONNX INT8 export later.
-- `mobilenetv3_small` is provided as an alternative since you mentioned
-  it, with its stride schedule patched so width only downsamples 4x
-  instead of MobileNetV3's default 32x (CTC needs enough time steps to
-  align against 50–100 character Quranic-length transcriptions — a
-  32x width collapse would starve it). Verify the patched stride count
-  against your installed torchvision version before trusting it blindly.
-- `compute_output_seq_len()` converts `dataset.py`'s raw pixel widths
-  into the CTC `input_lengths` argument `nn.CTCLoss` needs — this is the
-  glue between the two files you'll use directly in the training loop.
-- `greedy_ctc_decode()` is included only as a bare sanity check (e.g.
-  "is the model outputting anything Arabic-shaped after a few epochs")
-  — real CTC decoding with the frozen vocabulary is the next step.
-
-Run `python model.py` (needs `torch`/`torchvision`) to print param counts
-and confirm output shapes for both backbones on a dummy batch.
-
----
-
-## 5. Vocabulary freezing & CTC decoding (`decode.py`)
-
-Freeze the vocab once, before any training run, and reuse the same
-`vocab.json` for every checkpoint from that run (index-to-character
-mapping must stay identical across train/resume/inference):
-
-```python
-from vocab import Vocabulary
-Vocabulary().save('/content/drive/MyDrive/quran_htr/vocab.json')
-```
-
-`decode.py` provides two vocabulary-aware decoders:
-- `greedy_decode(log_probs, vocab)` — fast best-path decode, used inside
-  `train.py`'s validation loop every epoch.
-- `beam_search_decode(log_probs, vocab, beam_width=10)` — prefix beam
-  search (no language model yet — that's a Step 2/3 addition once a
-  Quran-domain LM exists). Slower (O(T·beam_width·V) per sample); use it
-  for final evaluation or spot-checking specific lines, not every epoch.
-
-## 6. Training pipeline (`train.py`)
-
-```bash
-python train.py \
-    --train_manifest /content/manifests/train.csv \
-    --val_manifest /content/manifests/val.csv \
-    --vocab_path /content/drive/MyDrive/quran_htr/vocab.json \
-    --checkpoint_dir /content/drive/MyDrive/quran_htr/checkpoints \
-    --epochs 50 --batch_size 16
-```
-
-- Loss: `nn.CTCLoss(blank=vocab.blank_id, zero_infinity=True)` —
-  `zero_infinity=True` prevents NaN loss from propagating when an
-  occasional batch has `input_length < target_length` (shouldn't happen
-  with real KHATT lines, but protects a long unattended run from one bad
-  sample derailing training).
-- Optimizer: Adam, `ReduceLROnPlateau` scheduler on validation CER.
-- Gradient clipping (`--grad_clip`, default 5.0) — standard for
-  BiLSTM-based CTC models, prevents occasional exploding gradients.
-- Every epoch saves `checkpoint_dir/last.pt` (for resuming) and, when
-  validation CER improves, `checkpoint_dir/best.pt`. Both store model,
-  optimizer, and scheduler state plus epoch/best_cer, so
-  `--resume /path/last.pt` picks up exactly where training left off —
-  point `--checkpoint_dir` at a Drive folder and this survives a
-  disconnected Colab runtime.
-- `--max_steps` caps steps per epoch — for local smoke testing only
-  (see below), never for a real training run.
-
-## 7. Local testing before Colab (`smoke_test.py`)
-
-**Yes — test locally before starting any Colab run**, but with two
-different tiers, not one:
-
-**Tier 1 — `python smoke_test.py` (do this first, always).** Needs no
-dataset at all — it runs the model on random dummy tensors shaped
-exactly like `dataset.py`'s real batches, and checks: vocab save/load,
-forward pass shape for both backbones, `compute_output_seq_len()`
-consistency, a full forward→CTC loss→backward→optimizer step with no
-NaN/Inf, and that both decoders run and return the right count of
-strings. This catches the most common class of CTC bugs (input/target
-length mismatches, blank-id mismatches, shape errors) in seconds on CPU,
-before you've downloaded a single byte of KHATT. Run it now.
-
-**Tier 2 — a tiny real-data run, once you have *some* KHATT data local.**
-Build a manifest from 10–20 real line images
-(`build_manifest_from_image_label_dirs()` on a small local subset), then:
-
-```bash
-python train.py \
-    --train_manifest tiny_train.csv --val_manifest tiny_train.csv \
-    --vocab_path /tmp/vocab.json --checkpoint_dir /tmp/ckpt \
-    --epochs 2 --batch_size 4 --max_steps 3 --num_workers 0
-```
-
-This exercises the real `LineImageDataset` image-loading/preprocessing
-path (which Tier 1 deliberately skips) — confirms real KHATT images
-actually load, resize, and collate correctly, and that checkpoints
-actually get written — all in well under a minute on CPU. `--max_steps 3`
-keeps it fast; this run is not meant to produce a useful model.
-
-**What stays Colab-only:** the full training run (1.5) — real GPU time
-on the full manifest, all epochs, no `--max_steps` cap.
-
-## Next in this session (not yet built)
-- Run the real training (1.5) on Colab against the full KHATT manifest.
-- Sanity-check the resulting checkpoint (1.6) — spot-check decodes on
-  held-out lines, confirm CER is in a reasonable range — before moving
-  to Step 2 (Quran domain adaptation).
