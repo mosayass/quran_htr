@@ -35,21 +35,22 @@ def evaluate(
     use_beam_search: bool = False,
     beam_width: int = 10,
     max_samples_display: int = 10,
+    label_order: str = "logical",
 ):
     model.eval()
     all_preds, all_targets = [], []
     sample_pairs = []
 
-    print(f"Evaluating {len(loader.dataset)} test samples on {device}...")
+    print(f"Evaluating {len(loader.dataset)} test samples on {device} (label_order={label_order})...")
     with torch.no_grad():
         for step, batch in enumerate(loader):
             images = batch["images"].to(device)
             log_probs = model(images)  # (T, B, V)
 
             if use_beam_search:
-                preds = beam_search_decode(log_probs, vocab, beam_width=beam_width)
+                preds = beam_search_decode(log_probs, vocab, beam_width=beam_width, label_order=label_order)
             else:
-                preds = greedy_decode(log_probs, vocab)
+                preds = greedy_decode(log_probs, vocab, label_order=label_order)
 
             all_preds.extend(preds)
             all_targets.extend(batch["texts"])
@@ -65,7 +66,7 @@ def evaluate(
 
 def main():
     p = argparse.ArgumentParser(description="Evaluate Quran HTR CRNN on test split")
-    p.add_argument("--test_manifest", required=True, help="Path to test.csv")
+    p.add_argument("--test_manifest", required=True, help="Path to test.csv or .pt shard")
     p.add_argument("--checkpoint", required=True, help="Path to best.pt checkpoint")
     p.add_argument("--vocab_path", default="vocab.json", help="Path to vocab.json")
     p.add_argument("--backbone", default="vgg_lite", choices=["vgg_lite", "mobilenetv3_small"])
@@ -73,20 +74,37 @@ def main():
     p.add_argument("--beam_search", action="store_true", help="Use beam search decoding instead of greedy")
     p.add_argument("--beam_width", type=int, default=10)
     p.add_argument("--num_workers", type=int, default=0)
+    p.add_argument("--label_order", default=None, choices=["logical", "visual"],
+                   help="Override label reading order. If omitted, read directly from checkpoint metadata.")
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
     vocab = Vocabulary.load(args.vocab_path)
-    test_ds = LineImageDataset(args.test_manifest, vocab)
+    ckpt = torch.load(args.checkpoint, map_location=device)
+    ckpt_order = ckpt.get("label_order", "logical")
+    if args.label_order is not None and args.label_order != ckpt_order:
+        raise ValueError(
+            f"Checkpoint label_order mismatch: --label_order is '{args.label_order}', "
+            f"but checkpoint '{args.checkpoint}' has label_order='{ckpt_order}'."
+        )
+    effective_order = args.label_order or ckpt_order
+    print(f"Label order: {effective_order} (from checkpoint: '{ckpt_order}')")
+
+    manifest_p = Path(args.test_manifest)
+    if manifest_p.suffix.lower() == ".pt":
+        from shards import ShardDataset
+        test_ds = ShardDataset(manifest_p, vocab, augment=False, label_order=effective_order)
+    else:
+        test_ds = LineImageDataset(args.test_manifest, vocab, augment=False, label_order=effective_order)
+
     test_loader = DataLoader(
         test_ds, batch_size=args.batch_size, shuffle=False,
         num_workers=args.num_workers, collate_fn=collate_fn
     )
 
     model = CRNN(vocab_size=len(vocab), backbone=args.backbone).to(device)
-    ckpt = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(ckpt["model"])
     epoch = ckpt.get("epoch", "unknown")
     best_cer = ckpt.get("best_cer", None)
@@ -95,7 +113,8 @@ def main():
 
     cer, wer, samples = evaluate(
         model, test_loader, vocab, device,
-        use_beam_search=args.beam_search, beam_width=args.beam_width
+        use_beam_search=args.beam_search, beam_width=args.beam_width,
+        label_order=effective_order,
     )
 
     decode_mode = f"Beam Search (width={args.beam_width})" if args.beam_search else "Greedy Decode"

@@ -27,9 +27,10 @@ import torch
 from vocab import Vocabulary
 
 
-def greedy_decode(log_probs: torch.Tensor, vocab: Vocabulary) -> List[str]:
+def greedy_decode(log_probs: torch.Tensor, vocab: Vocabulary, label_order: str = "logical") -> List[str]:
     """log_probs: (T, B, V) -> list of B decoded strings.
-    Best-path decode + CTC collapse (drop repeats, drop blanks)."""
+    Best-path decode + CTC collapse (drop repeats, drop blanks).
+    If label_order == 'visual', reverses decoded visual characters back to logical Arabic order."""
     best_path = log_probs.argmax(dim=2).transpose(0, 1)  # (T,B) -> (B,T)
     texts = []
     for seq in best_path:
@@ -39,7 +40,10 @@ def greedy_decode(log_probs: torch.Tensor, vocab: Vocabulary) -> List[str]:
             if s != prev and s != vocab.blank_id:
                 collapsed.append(s)
             prev = s
-        texts.append(vocab.decode(collapsed))
+        decoded = vocab.decode(collapsed)
+        if label_order == "visual":
+            decoded = decoded[::-1]
+        texts.append(decoded)
     return texts
 
 
@@ -47,6 +51,7 @@ def beam_search_decode(
     log_probs: torch.Tensor,
     vocab: Vocabulary,
     beam_width: int = 10,
+    label_order: str = "logical",
 ) -> List[str]:
     """
     Prefix beam search CTC decode (Hannun et al., 2014), no external
@@ -102,7 +107,10 @@ def beam_search_decode(
             )
 
         best_prefix = max(beam.items(), key=lambda kv: kv[1][0] + kv[1][1])[0]
-        results.append(vocab.decode(list(best_prefix)))
+        decoded = vocab.decode(list(best_prefix))
+        if label_order == "visual":
+            decoded = decoded[::-1]
+        results.append(decoded)
 
     return results
 

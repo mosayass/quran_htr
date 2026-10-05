@@ -40,24 +40,30 @@ from metrics import corpus_cer_wer
 from shards import ShardDataset
 
 
-def load_dataset_source(path_str: str, vocab: Vocabulary, augment: bool = False) -> Dataset:
+def load_dataset_source(
+    path_str: str,
+    vocab: Vocabulary,
+    augment: bool = False,
+    label_order: str = "logical",
+) -> Dataset:
     """Loads either a ShardDataset (if path is a .pt file, glob pattern, or directory with .pt files) or LineImageDataset."""
     import glob
     matched = sorted(glob.glob(path_str))
     if matched and all(Path(m).suffix.lower() == ".pt" for m in matched):
-        return ShardDataset([Path(m) for m in matched], vocab, augment=augment)
+        return ShardDataset([Path(m) for m in matched], vocab, augment=augment, label_order=label_order)
     p = Path(path_str)
     if p.suffix.lower() == ".pt" or (p.is_dir() and any(p.glob("*.pt"))):
-        return ShardDataset(p, vocab, augment=augment)
-    return LineImageDataset(path_str, vocab, augment=augment)
+        return ShardDataset(p, vocab, augment=augment, label_order=label_order)
+    return LineImageDataset(path_str, vocab, augment=augment, label_order=label_order)
 
 
 def build_dataloaders(args, vocab: Vocabulary):
+    label_order = getattr(args, "label_order", "logical")
     # 1. Training loader
     if args.mix:
         datasets: List[Dataset] = []
         weights: List[float] = []
-        print("[build_dataloaders] Setting up weighted multi-source mixing:")
+        print(f"[build_dataloaders] Setting up weighted multi-source mixing (label_order={label_order}):")
         for item in args.mix:
             if ":" not in item:
                 raise ValueError(
@@ -65,7 +71,7 @@ def build_dataloaders(args, vocab: Vocabulary):
                 )
             m_path, w_str = item.rsplit(":", 1)
             w = float(w_str)
-            ds = load_dataset_source(m_path, vocab, augment=True)
+            ds = load_dataset_source(m_path, vocab, augment=True, label_order=label_order)
             if len(ds) == 0:
                 print(f"  [warn] Source {m_path} has 0 samples; skipping.")
                 continue
@@ -101,7 +107,7 @@ def build_dataloaders(args, vocab: Vocabulary):
     else:
         if not args.train_manifest:
             raise ValueError("Either --train_manifest or repeatable --mix SOURCE:WEIGHT must be specified.")
-        train_ds = load_dataset_source(args.train_manifest, vocab, augment=True)
+        train_ds = load_dataset_source(args.train_manifest, vocab, augment=True, label_order=label_order)
         if args.samples_per_epoch is not None:
             sampler = RandomSampler(train_ds, replacement=True, num_samples=args.samples_per_epoch)
             train_loader = DataLoader(
@@ -125,7 +131,7 @@ def build_dataloaders(args, vocab: Vocabulary):
     # 2. Synthetic (primary) validation loader
     val_loader = None
     if args.val_manifest:
-        val_ds = load_dataset_source(args.val_manifest, vocab, augment=False)
+        val_ds = load_dataset_source(args.val_manifest, vocab, augment=False, label_order=label_order)
         val_loader = DataLoader(
             val_ds,
             batch_size=args.batch_size,
@@ -137,7 +143,7 @@ def build_dataloaders(args, vocab: Vocabulary):
     # 3. Real-ink (KHATT) validation loader
     val_real_loader = None
     if args.val_real_manifest:
-        val_real_ds = load_dataset_source(args.val_real_manifest, vocab, augment=False)
+        val_real_ds = load_dataset_source(args.val_real_manifest, vocab, augment=False, label_order=label_order)
         val_real_loader = DataLoader(
             val_real_ds,
             batch_size=args.batch_size,
@@ -149,7 +155,7 @@ def build_dataloaders(args, vocab: Vocabulary):
     return train_loader, val_loader, val_real_loader
 
 
-def save_checkpoint(path, model, optimizer, scheduler, epoch, best_cer):
+def save_checkpoint(path, model, optimizer, scheduler, epoch, best_cer, label_order="logical"):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     torch.save({
         "model": model.state_dict(),
@@ -157,11 +163,18 @@ def save_checkpoint(path, model, optimizer, scheduler, epoch, best_cer):
         "scheduler": scheduler.state_dict() if scheduler is not None else None,
         "epoch": epoch,
         "best_cer": best_cer,
+        "label_order": label_order,
     }, path)
 
 
-def load_checkpoint(path, model, optimizer=None, scheduler=None, map_location="cpu"):
+def load_checkpoint(path, model, optimizer=None, scheduler=None, map_location="cpu", expected_label_order=None):
     ckpt = torch.load(path, map_location=map_location)
+    ckpt_order = ckpt.get("label_order")
+    if expected_label_order is not None and ckpt_order is not None and ckpt_order != expected_label_order:
+        raise ValueError(
+            f"Checkpoint label_order mismatch: checkpoint '{path}' has label_order='{ckpt_order}', "
+            f"but current training is configured with label_order='{expected_label_order}'."
+        )
     model.load_state_dict(ckpt["model"])
     if optimizer is not None and ckpt.get("optimizer") is not None:
         optimizer.load_state_dict(ckpt["optimizer"])
@@ -197,7 +210,7 @@ def train_one_epoch(model, loader, optimizer, ctc_loss, device, grad_clip, max_s
 
 
 @torch.no_grad()
-def validate(model, loader, ctc_loss, vocab, device, max_steps=None):
+def validate(model, loader, ctc_loss, vocab, device, max_steps=None, label_order="logical"):
     if loader is None:
         return 0.0, float("inf"), float("inf"), []
     model.eval()
@@ -218,7 +231,7 @@ def validate(model, loader, ctc_loss, vocab, device, max_steps=None):
         total_loss += loss.item()
         n_batches += 1
 
-        preds = greedy_decode(log_probs, vocab)
+        preds = greedy_decode(log_probs, vocab, label_order=label_order)
         all_preds.extend(preds)
         all_targets.extend(batch["texts"])
 
@@ -254,10 +267,12 @@ def main():
     p.add_argument("--resume", default=None, help="Checkpoint path to resume full state from")
     p.add_argument("--max_steps", type=int, default=None,
                    help="Cap train/val steps per epoch -- for local smoke tests, not real training")
+    p.add_argument("--label_order", default="logical", choices=["logical", "visual"],
+                   help="Label reading order: 'logical' (default, RTL) or 'visual' (reversed LTR, matching CTC time frames)")
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"device: {device}")
+    print(f"device: {device} | label_order: {args.label_order}")
 
     vocab = Vocabulary.load(args.vocab_path)
     train_loader, val_loader, val_real_loader = build_dataloaders(args, vocab)
@@ -267,6 +282,12 @@ def main():
     # Model weight loading: --init_weights loads model weights only
     if args.init_weights:
         ckpt_init = torch.load(args.init_weights, map_location=device)
+        init_order = ckpt_init.get("label_order")
+        if init_order is not None and init_order != args.label_order:
+            raise ValueError(
+                f"Checkpoint label_order mismatch: --init_weights checkpoint has label_order='{init_order}', "
+                f"but --label_order is configured as '{args.label_order}'."
+            )
         state_dict = ckpt_init.get("model", ckpt_init)
         model.load_state_dict(state_dict)
         print(f"Loaded initial model weights from {args.init_weights} (optimizer, scheduler, and epoch reset)")
@@ -286,7 +307,9 @@ def main():
     best_real_cer = float("inf")
 
     if args.resume:
-        start_epoch, best_cer = load_checkpoint(args.resume, model, optimizer, scheduler, map_location=device)
+        start_epoch, best_cer = load_checkpoint(
+            args.resume, model, optimizer, scheduler, map_location=device, expected_label_order=args.label_order
+        )
         print(f"Resumed from {args.resume} at epoch {start_epoch}, best_cer={best_cer:.4f}")
 
     for epoch in range(start_epoch, args.epochs):
@@ -296,11 +319,11 @@ def main():
         )
 
         val_loss, val_cer, val_wer, samples = validate(
-            model, val_loader, ctc_loss, vocab, device, max_steps=args.max_steps
+            model, val_loader, ctc_loss, vocab, device, max_steps=args.max_steps, label_order=args.label_order
         ) if val_loader else (0.0, float("inf"), float("inf"), [])
 
         val_real_loss, val_real_cer, val_real_wer, real_samples = validate(
-            model, val_real_loader, ctc_loss, vocab, device, max_steps=args.max_steps
+            model, val_real_loader, ctc_loss, vocab, device, max_steps=args.max_steps, label_order=args.label_order
         ) if val_real_loader else (0.0, float("inf"), float("inf"), [])
 
         if val_loader:
@@ -326,16 +349,16 @@ def main():
             print(f"    [real]  pred:   {pred}\n            target: {target}")
 
         ckpt_dir = Path(args.checkpoint_dir)
-        save_checkpoint(ckpt_dir / "last.pt", model, optimizer, scheduler, epoch + 1, best_cer)
+        save_checkpoint(ckpt_dir / "last.pt", model, optimizer, scheduler, epoch + 1, best_cer, label_order=args.label_order)
 
         if val_loader and val_cer < best_cer:
             best_cer = val_cer
-            save_checkpoint(ckpt_dir / "best.pt", model, optimizer, scheduler, epoch + 1, best_cer)
+            save_checkpoint(ckpt_dir / "best.pt", model, optimizer, scheduler, epoch + 1, best_cer, label_order=args.label_order)
             print(f"    ** new best synthetic CER: {best_cer:.4f} -- saved best.pt **")
 
         if val_real_loader and val_real_cer < best_real_cer:
             best_real_cer = val_real_cer
-            save_checkpoint(ckpt_dir / "best_real.pt", model, optimizer, scheduler, epoch + 1, best_real_cer)
+            save_checkpoint(ckpt_dir / "best_real.pt", model, optimizer, scheduler, epoch + 1, best_real_cer, label_order=args.label_order)
             print(f"    ** new best real CER: {best_real_cer:.4f} -- saved best_real.pt **")
 
 

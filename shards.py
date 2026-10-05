@@ -50,10 +50,14 @@ class ShardDataset(Dataset):
         augment: bool = False,
         max_target_len: int = 200,
         filter_oov: bool = True,
+        label_order: str = "logical",
     ):
+        if label_order not in ("logical", "visual"):
+            raise ValueError(f"label_order must be 'logical' or 'visual', got '{label_order}'")
         self.vocab = vocab
         self.augment = augment
         self.max_target_len = max_target_len
+        self.label_order = label_order
 
         if isinstance(shard_paths, (str, Path)):
             p = Path(shard_paths)
@@ -145,7 +149,8 @@ class ShardDataset(Dataset):
         if pad_w:
             tensor = torch.nn.functional.pad(tensor, (0, pad_w), value=1.0)
 
-        target = torch.tensor(self.vocab.encode(text), dtype=torch.long)
+        label_text = text[::-1] if self.label_order == "visual" else text
+        target = torch.tensor(self.vocab.encode(label_text), dtype=torch.long)
         return Sample(image=tensor, target=target, text=text)
 
 

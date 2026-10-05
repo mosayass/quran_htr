@@ -381,10 +381,14 @@ class LineImageDataset(Dataset):
         max_target_len: int = 200,
         augment: bool = False,
         filter_oov: bool = True,
+        label_order: str = "logical",
     ):
+        if label_order not in ("logical", "visual"):
+            raise ValueError(f"label_order must be 'logical' or 'visual', got '{label_order}'")
         self.vocab = vocab
         self.max_target_len = max_target_len
         self.augment = augment
+        self.label_order = label_order
         self.rows: List[Tuple[str, str]] = []
         skipped = 0
         with open(manifest_csv, newline="", encoding="utf-8") as f:
@@ -408,7 +412,8 @@ class LineImageDataset(Dataset):
         img = Image.open(img_path)
         image_tensor = _resize_pad(img, augment=self.augment)
         text = text[: self.max_target_len]
-        target = torch.tensor(self.vocab.encode(text), dtype=torch.long)
+        label_text = text[::-1] if self.label_order == "visual" else text
+        target = torch.tensor(self.vocab.encode(label_text), dtype=torch.long)
         return Sample(image=image_tensor, target=target, text=text)
 
 
