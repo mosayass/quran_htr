@@ -260,6 +260,8 @@ def main():
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--batch_size", type=int, default=16)
     p.add_argument("--lr", type=float, default=1e-4, help="Fine-tuning default learning rate (1e-4)")
+    p.add_argument("--scheduler", choices=["plateau", "cosine"], default="plateau",
+                   help="LR scheduler type: 'plateau' (default) or 'cosine'")
     p.add_argument("--patience", type=int, default=5, help="ReduceLROnPlateau patience (default: 5)")
     p.add_argument("--min_lr", type=float, default=1e-5, help="Minimum learning rate (default: 1e-5)")
     p.add_argument("--grad_clip", type=float, default=5.0)
@@ -297,9 +299,14 @@ def main():
         print(f"Loaded pretrained backbone weights from {args.backbone_pretrained}")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=args.patience, min_lr=args.min_lr
-    )
+    if args.scheduler == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=args.epochs, eta_min=args.min_lr
+        )
+    else:
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=args.patience, min_lr=args.min_lr
+        )
     ctc_loss = torch.nn.CTCLoss(blank=vocab.blank_id, zero_infinity=True)
 
     start_epoch = 0
@@ -326,7 +333,9 @@ def main():
             model, val_real_loader, ctc_loss, vocab, device, max_steps=args.max_steps, label_order=args.label_order
         ) if val_real_loader else (0.0, float("inf"), float("inf"), [])
 
-        if val_loader:
+        if args.scheduler == "cosine":
+            scheduler.step()
+        elif val_loader:
             scheduler.step(val_cer)
 
         curr_lr = optimizer.param_groups[0]["lr"]
