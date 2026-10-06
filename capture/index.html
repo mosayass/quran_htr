@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hafiz HTR - Stopgap Ink Capture</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #10b981;
+      --danger: #ef4444;
+      --canvas-bg: #ffffff;
+      --ink: #000000;
+      --guide-line: #cbd5e1;
+      --guide-base: #93c5fd;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Amiri", "Traditional Arabic", sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem;
+    }
+    .header {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.75rem;
+    }
+    .title { font-size: 1.25rem; font-weight: 700; color: var(--primary); }
+    .mode-switch {
+      display: flex;
+      gap: 0.5rem;
+      background: var(--card-bg);
+      padding: 0.25rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .mode-btn.active {
+      background: var(--primary);
+      color: #0f172a;
+    }
+    .prompt-box {
+      width: 100%;
+      max-width: 960px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      text-align: center;
+      position: relative;
+    }
+    .prompt-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+    .prompt-text {
+      font-size: 2rem;
+      line-height: 1.6;
+      font-family: "Amiri", "Traditional Arabic", "Scheherazade", serif;
+      color: #38bdf8;
+      letter-spacing: 0.5px;
+    }
+    .canvas-container {
+      width: 100%;
+      max-width: 960px;
+      background: var(--canvas-bg);
+      border-radius: 12px;
+      border: 2px solid var(--border);
+      position: relative;
+      touch-action: none;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+    }
+    canvas {
+      width: 100%;
+      height: 240px;
+      display: block;
+      cursor: crosshair;
+    }
+    .controls {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1rem;
+      gap: 0.75rem;
+    }
+    .btn-group { display: flex; gap: 0.5rem; }
+    button {
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s;
+    }
+    .btn-secondary { background: var(--card-bg); color: var(--text); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-primary { background: var(--primary); color: #0f172a; border-color: var(--primary); }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-success { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+    .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.1); }
+    .stats-card {
+      width: 100%;
+      max-width: 960px;
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: rgba(30, 41, 59, 0.5);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-around;
+      text-align: center;
+    }
+    .stat-val { font-size: 1.2rem; font-weight: 700; color: var(--text); margin-top: 0.2rem; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="title">Hafiz HTR — Stopgap Ink Capture Studio</div>
+    <div class="mode-switch">
+      <button class="mode-btn active" id="modeLineBtn" onclick="setMode('line')">وضع السطر (Line: 3-9 كلمات)</button>
+      <button class="mode-btn" id="modeWordBtn" onclick="setMode('word')">وضع الكلمة (Word: كلمة واحدة)</button>
+    </div>
+  </div>
+
+  <div class="prompt-box">
+    <div class="prompt-info">
+      <span id="promptIndex">العينة: 1 / 30</span>
+      <span id="promptSurah">سورة الفاتحة</span>
+    </div>
+    <div class="prompt-text" id="promptText">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+  </div>
+
+  <div class="canvas-container">
+    <canvas id="inkCanvas"></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="btn-group">
+      <button class="btn-danger" onclick="clearCanvas()">مسح (Clear)</button>
+      <button class="btn-secondary" onclick="undoStroke()">تراجع (Undo)</button>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn-secondary" onclick="prevPrompt()">السابق (Prev)</button>
+      <button class="btn-primary" onclick="saveAndNext()">حفظ والتالي (Save & Next)</button>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn-success" onclick="exportCapturedDataset()">تصدير البيانات (Export ZIP / Folder)</button>
+    </div>
+  </div>
+
+  <div class="stats-card">
+    <div>
+      <div>العينات المحفوظة</div>
+      <div class="stat-val" id="savedCount">0</div>
+    </div>
+    <div>
+      <div>الخطوط الإرشادية (3 Ruled Lines)</div>
+      <div class="stat-val">أعلى / أساس / أدنى</div>
+    </div>
+    <div>
+      <div>دقة التصدير</div>
+      <div class="stat-val">64px Height uint8</div>
+    </div>
+  </div>
+
+  <script>
+    // Prompt sets from held-out test surahs (Surahs 1, 67, 78, 80, 89, 93, 108, 112, 113, 114)
+    const PROMPTS_LINE = [
+      { text: "أعلنت لهم وأسررت لهم إسرارا فقلت", surah: "نوح" },
+      { text: "خالدين فيها أبدا ذلك الفوز العظيم", surah: "النساء" },
+      { text: "مالك يوم الدين إياك نعبد وإياك نستعين", surah: "الفاتحة" },
+      { text: "وجنات ألفافا إن يوم الفصل كان ميقاتا", surah: "النبأ" },
+      { text: "بالقلم علم الإنسان ما لم يعلم", surah: "العلق" },
+      { text: "ثبورا ويصلى سعيرا إنه كان في أهله مسرورا", surah: "الانشقاق" },
+      { text: "لم يلد ولم يولد ولم يكن له كفوا أحد", surah: "الإخلاص" },
+      { text: "قل أعوذ برب الفلق من شر ما خلق", surah: "الفلق" },
+      { text: "ومن شر غاسق إذا وقب ومن شر النفاثات", surah: "الفلق" },
+      { text: "قل أعوذ برب الناس ملك الناس إله الناس", surah: "الناس" },
+      { text: "إنا أعطيناك الكوثر فصل لربك وانحر", surah: "الكوثر" },
+      { text: "والضحى والليل إذا سجى ما ودعك ربك", surah: "الضحى" },
+      { text: "والفجر وليال عشر والشفع والوتر والليل إذا يسر", surah: "الفجر" },
+      { text: "تبارك الذي بيده الملك وهو على كل شيء قدير", surah: "الملك" },
+      { text: "الذي خلق الموت والحياة ليبلوكم أيكم أحسن عملا", surah: "الملك" },
+      { text: "عبس وتولى أن جاءه الأعمى وما يدريك لعله يزكى", surah: "عبس" },
+      { text: "الحمد لله رب العالمين الرحمن الرحيم", surah: "الفاتحة" },
+      { text: "اهدنا الصراط المستقيم صراط الذين أنعمت عليهم", surah: "الفاتحة" },
+      { text: "غير المغضوب عليهم ولا الضالين", surah: "الفاتحة" },
+      { text: "عم يتساءلون عن النبإ العظيم الذي هم فيه مختلفون", surah: "النبأ" },
+      { text: "ألم نجعل الأرض مهادا والجبال أوتادا وخلقناكم أزواجا", surah: "النبأ" },
+      { text: "وجعلنا نومكم سباتا وجعلنا الليل لباسا وجعلنا النهار معاشا", surah: "النبأ" },
+      { text: "وبنينا فوقكم سبعا شدادا وجعلنا سراجا وهاجا", surah: "النبأ" },
+      { text: "وأنزلنا من المعصرات ماء ثجاجا لنخرج به حبا ونباتا", surah: "النبأ" },
+      { text: "يوم ينفخ في الصور فتأتون أفواجا وفتحت السماء فكانت أبوابا", surah: "النبأ" },
+      { text: "إن للمتقين مفازا حدائق وأعنابا وكواعب أترابا", surah: "النبأ" },
+      { text: "وكأسا دهاقا لا يسمعون فيها لغوا ولا كذابا", surah: "النبأ" },
+      { text: "جزاء من ربك عطاء حسابا رب السماوات والأرض", surah: "النبأ" },
+      { text: "يوم يقوم الروح والملائكة صفا لا يتكلمون", surah: "النبأ" },
+      { text: "إلا من أذن له الرحمن وقال صوابا ذلك اليوم الحق", surah: "النبأ" }
+    ];
+
+    const PROMPTS_WORD = [
+      "الله", "الرحمن", "الرحيم", "الملك", "القدوس", "السلام", "المؤمن", "المهيمن",
+      "العزيز", "الجبار", "المتكبر", "الخالق", "البارئ", "المصور", "الصمد", "الكوثر",
+      "الفلق", "الناس", "أحد", "الدين", "نعبد", "نستعين", "المستقيم", "القرآن",
+      "النبإ", "العظيم", "الأرض", "الجبال", "سباتا", "معاشا", "أفواجا", "مفازا",
+      "حدائق", "أعنابا", "دهاقا", "صوابا", "غاسق", "وقب", "النفاثات", "العقد",
+      "حاسد", "حسد", "الوسواس", "الخناس", "صدور", "الجنة", "الضحى", "سجى",
+      "والفجر", "الوتر"
+    ].map(w => ({ text: w, surah: "مفردات الاختبار" }));
+
+    let currentMode = 'line';
+    let currentIndex = 0;
+    let savedSamples = [];
+
+    const canvas = document.getElementById('inkCanvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+    let currentStroke = [];
+    let strokes = []; // Array of strokes
+
+    // 3 Ruled guide lines (normalized coordinates)
+    const GUIDE_TOP_Y = 50;      // Ascender line
+    const GUIDE_BASE_Y = 160;    // Baseline
+    const GUIDE_BOT_Y = 200;     // Descender line
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = 240 * window.devicePixelRatio;
+      redraw();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function getPrompts() {
+      return currentMode === 'line' ? PROMPTS_LINE : PROMPTS_WORD;
+    }
+
+    function updatePromptUI() {
+      const prompts = getPrompts();
+      const p = prompts[currentIndex];
+      document.getElementById('promptText').innerText = p.text;
+      document.getElementById('promptSurah').innerText = p.surah;
+      document.getElementById('promptIndex').innerText = `العينة: ${currentIndex + 1} / ${prompts.length}`;
+      document.getElementById('savedCount').innerText = savedSamples.length;
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      currentIndex = 0;
+      document.getElementById('modeLineBtn').classList.toggle('active', mode === 'line');
+      document.getElementById('modeWordBtn').classList.toggle('active', mode === 'word');
+      clearCanvas();
+      updatePromptUI();
+    }
+
+    function drawGuidelines() {
+      const scale = window.devicePixelRatio;
+      const w = canvas.width;
+
+      ctx.save();
+      ctx.lineWidth = 1 * scale;
+      
+      // Top guideline
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.setLineDash([6 * scale, 6 * scale]);
+      ctx.beginPath();
+      ctx.moveTo(0, GUIDE_TOP_Y * scale);
+      ctx.lineTo(w, GUIDE_TOP_Y * scale);
+      ctx.stroke();
+
+      // Baseline (solid, blue tint)
+      ctx.strokeStyle = '#93c5fd';
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(0, GUIDE_BASE_Y * scale);
+      ctx.lineTo(w, GUIDE_BASE_Y * scale);
+      ctx.stroke();
+
+      // Bottom guideline
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.setLineDash([4 * scale, 4 * scale]);
+      ctx.beginPath();
+      ctx.moveTo(0, GUIDE_BOT_Y * scale);
+      ctx.lineTo(w, GUIDE_BOT_Y * scale);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function redraw() {
+      const scale = window.devicePixelRatio;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawGuidelines();
+
+      ctx.strokeStyle = '#000000';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      for (const stroke of strokes) {
+        if (stroke.length < 2) continue;
+        for (let i = 1; i < stroke.length; i++) {
+          const p1 = stroke[i - 1];
+          const p2 = stroke[i];
+          const pressure = p2.p || 0.5;
+          ctx.lineWidth = Math.max(1.5, pressure * 3.5) * scale;
+          ctx.beginPath();
+          ctx.moveTo(p1.x * scale, p1.y * scale);
+          ctx.lineTo(p2.x * scale, p2.y * scale);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Pointer Events
+    canvas.addEventListener('pointerdown', (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      isDrawing = true;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      currentStroke = [{ x, y, t: Date.now(), p: e.pressure || 0.5 }];
+      strokes.push(currentStroke);
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!isDrawing) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const p = { x, y, t: Date.now(), p: e.pressure || 0.5 };
+      currentStroke.push(p);
+
+      const scale = window.devicePixelRatio;
+      const prev = currentStroke[currentStroke.length - 2];
+      ctx.strokeStyle = '#000000';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(1.5, p.p * 3.5) * scale;
+      ctx.beginPath();
+      ctx.moveTo(prev.x * scale, prev.y * scale);
+      ctx.lineTo(p.x * scale, p.y * scale);
+      ctx.stroke();
+    });
+
+    function endStroke(e) {
+      if (isDrawing) {
+        isDrawing = false;
+        redraw();
+      }
+    }
+    canvas.addEventListener('pointerup', endStroke);
+    canvas.addEventListener('pointercancel', endStroke);
+
+    function clearCanvas() {
+      strokes = [];
+      redraw();
+    }
+
+    function undoStroke() {
+      strokes.pop();
+      redraw();
+    }
+
+    function prevPrompt() {
+      if (currentIndex > 0) {
+        currentIndex--;
+        clearCanvas();
+        updatePromptUI();
+      }
+    }
+
+    function exportRuledBandPNG() {
+      // Find ink bounds horizontally
+      let minX = Infinity, maxX = -Infinity;
+      for (const stroke of strokes) {
+        for (const pt of stroke) {
+          if (pt.x < minX) minX = pt.x;
+          if (pt.x > maxX) maxX = pt.x;
+        }
+      }
+      if (minX === Infinity) return null; // No ink
+
+      const scale = window.devicePixelRatio;
+      const padX = 16;
+      const cropX1 = Math.max(0, (minX - padX) * scale);
+      const cropX2 = Math.min(canvas.width, (maxX + padX) * scale);
+      const cropW = Math.max(cropX2 - cropX1, 32);
+
+      // Vertical crop to ruled band (from top guideline to bottom guideline)
+      const cropY1 = GUIDE_TOP_Y * scale;
+      const cropY2 = GUIDE_BOT_Y * scale;
+      const cropH = cropY2 - cropY1;
+
+      // Extract raw ink on pure white canvas (without guidelines)
+      const offscreen = document.createElement('canvas');
+      offscreen.width = cropW;
+      offscreen.height = cropH;
+      const offCtx = offscreen.getContext('2d');
+      offCtx.fillStyle = '#ffffff';
+      offCtx.fillRect(0, 0, cropW, cropH);
+
+      offCtx.strokeStyle = '#000000';
+      offCtx.lineCap = 'round';
+      offCtx.lineJoin = 'round';
+
+      for (const stroke of strokes) {
+        if (stroke.length < 2) continue;
+        for (let i = 1; i < stroke.length; i++) {
+          const p1 = stroke[i - 1];
+          const p2 = stroke[i];
+          offCtx.lineWidth = Math.max(1.5, (p2.p || 0.5) * 3.5) * scale;
+          offCtx.beginPath();
+          offCtx.moveTo(p1.x * scale - cropX1, p1.y * scale - cropY1);
+          offCtx.lineTo(p2.x * scale - cropX1, p2.y * scale - cropY1);
+          offCtx.stroke();
+        }
+      }
+
+      // Resize to TARGET_HEIGHT = 64px
+      const targetH = 64;
+      const targetW = Math.max(32, Math.round(cropW * (targetH / cropH)));
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = targetW;
+      finalCanvas.height = targetH;
+      const fCtx = finalCanvas.getContext('2d');
+      fCtx.fillStyle = '#ffffff';
+      fCtx.fillRect(0, 0, targetW, targetH);
+      fCtx.drawImage(offscreen, 0, 0, targetW, targetH);
+
+      return finalCanvas.toDataURL('image/png');
+    }
+
+    function saveAndNext() {
+      if (strokes.length === 0) {
+        alert("يرجى كتابة النص أولاً قبل الحفظ!");
+        return;
+      }
+      const dataUrl = exportRuledBandPNG();
+      if (!dataUrl) return;
+
+      const prompts = getPrompts();
+      const p = prompts[currentIndex];
+      const sampleId = `sample_${currentMode}_${String(currentIndex + 1).padStart(3, '0')}`;
+
+      savedSamples.push({
+        id: sampleId,
+        mode: currentMode,
+        text: p.text,
+        surah: p.surah,
+        strokes: JSON.parse(JSON.stringify(strokes)),
+        dataUrl: dataUrl
+      });
+
+      clearCanvas();
+      if (currentIndex < prompts.length - 1) {
+        currentIndex++;
+      }
+      updatePromptUI();
+    }
+
+    function exportCapturedDataset() {
+      if (savedSamples.length === 0) {
+        alert("لا توجد عينات محفوظة للتصدير بعد!");
+        return;
+      }
+
+      // Generate Manifest CSV
+      let csv = "sample_id,image_file,mode,transcription\n";
+      for (const s of savedSamples) {
+        csv += `${s.id},${s.id}.png,${s.mode},"${s.text}"\n`;
+      }
+
+      // Download manifest.csv
+      const blobCsv = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const aCsv = document.createElement("a");
+      aCsv.href = URL.createObjectURL(blobCsv);
+      aCsv.download = "manifest.csv";
+      aCsv.click();
+
+      // Download strokes.json
+      const strokesData = savedSamples.map(s => ({ id: s.id, text: s.text, strokes: s.strokes }));
+      const blobJson = new Blob([JSON.stringify(strokesData, null, 2)], { type: "application/json" });
+      const aJson = document.createElement("a");
+      aJson.href = URL.createObjectURL(blobJson);
+      aJson.download = "strokes.json";
+      aJson.click();
+
+      // Download each image
+      savedSamples.forEach((s, idx) => {
+        setTimeout(() => {
+          const aImg = document.createElement("a");
+          aImg.href = s.dataUrl;
+          aImg.download = `${s.id}.png`;
+          aImg.click();
+        }, idx * 100);
+      });
+
+      alert(`تم بدء تنزيل ${savedSamples.length} عينة بنجاح (الصور + manifest.csv + strokes.json)!`);
+    }
+
+    // Init
+    resizeCanvas();
+    updatePromptUI();
+  </script>
+</body>
+</html>
