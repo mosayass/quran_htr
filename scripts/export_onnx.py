@@ -37,10 +37,11 @@ from model import CRNN
 from shards import ShardDataset
 from dataset import collate_fn
 from decode import greedy_decode
+import hashlib
 from metrics import corpus_cer_wer
 
 
-def export_to_onnx(model: CRNN, onnx_path: Path, order: str = "visual"):
+def export_to_onnx(model: CRNN, onnx_path: Path, order: str = "visual", vocab_path: Path | None = None):
     onnx_path.parent.mkdir(parents=True, exist_ok=True)
     dummy_input = torch.randn(1, 1, 64, 512, dtype=torch.float32)
 
@@ -60,12 +61,35 @@ def export_to_onnx(model: CRNN, onnx_path: Path, order: str = "visual"):
         },
     )
 
-    # Check and add visual order metadata
+    # Check and add model metadata
     onnx_model = onnx.load(str(onnx_path))
     onnx.checker.check_model(onnx_model)
-    meta = onnx_model.metadata_props.add()
-    meta.key = "label_order"
-    meta.value = order
+    
+    # 1. Label order
+    meta_order = onnx_model.metadata_props.add()
+    meta_order.key = "label_order"
+    meta_order.value = order
+
+    # 2. Vocab hash
+    if vocab_path is None:
+        vocab_path = Path("vocab.json")
+    if Path(vocab_path).exists():
+        v_bytes = Path(vocab_path).read_bytes()
+        v_hash = hashlib.sha256(v_bytes).hexdigest()
+        meta_hash = onnx_model.metadata_props.add()
+        meta_hash.key = "vocab_hash"
+        meta_hash.value = v_hash
+
+        meta_vfile = onnx_model.metadata_props.add()
+        meta_vfile.key = "vocab_file"
+        meta_vfile.value = Path(vocab_path).name
+
+    # 3. Contract parameters
+    for k, v in [("blank_id", "0"), ("target_height", "64"), ("width_multiple", "32"), ("polarity", "bg_white_ink_black")]:
+        m = onnx_model.metadata_props.add()
+        m.key = k
+        m.value = v
+
     onnx.save(onnx_model, str(onnx_path))
     print(f"[ONNX] Successfully exported to {onnx_path} (size: {onnx_path.stat().st_size / (1024*1024):.2f} MB)")
 
