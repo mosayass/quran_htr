@@ -1,0 +1,941 @@
+{
+  "metadata": {
+    "source_vowelled": "data/tanzil/quran-simple.txt",
+    "source_rasm": "data/tanzil/quran-simple-clean.txt",
+    "test_surahs": [
+      1,
+      11,
+      25,
+      32,
+      41,
+      43,
+      44,
+      52,
+      53,
+      62,
+      64,
+      68,
+      71,
+      76,
+      78,
+      84,
+      89,
+      90,
+      92,
+      96,
+      100,
+      101,
+      103,
+      107,
+      111,
+      112
+    ],
+    "line_prompts_count": 40,
+    "word_prompts_count": 60,
+    "allah_in_lines": 8
+  },
+  "lines": [
+    {
+      "surah_id": 101,
+      "ayah_id": 4,
+      "surah_name": "سورة القارعة",
+      "rasm": "يوم يكون الناس كالفراش المبثوث",
+      "vowelled": "يَوْمَ يَكُونُ النَّاسُ كَالْفَرَاشِ الْمَبْثُوثِ",
+      "words_count": 5,
+      "id": "line_01"
+    },
+    {
+      "surah_id": 25,
+      "ayah_id": 11,
+      "surah_name": "سورة الفرقان",
+      "rasm": "بل كذبوا بالساعة وأعتدنا لمن كذب بالساعة سعيرا",
+      "vowelled": "بَلْ كَذَّبُوا بِالسَّاعَةِ وَأَعْتَدْنَا لِمَن كَذَّبَ بِالسَّاعَةِ سَعِيرًا",
+      "words_count": 8,
+      "id": "line_02"
+    },
+    {
+      "surah_id": 64,
+      "ayah_id": 13,
+      "surah_name": "سورة التغابن",
+      "rasm": "الله لا إله إلا هو وعلى الله فليتوكل المؤمنون",
+      "vowelled": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ وَعَلَى اللَّهِ فَلْيَتَوَكَّلِ الْمُؤْمِنُونَ",
+      "words_count": 9,
+      "id": "line_03"
+    },
+    {
+      "surah_id": 52,
+      "ayah_id": 16,
+      "surah_name": "سورة الطور",
+      "rasm": "سواء عليكم إنما تجزون",
+      "vowelled": "سَوَاءٌ عَلَيْكُمْ إِنَّمَا تُجْزَوْنَ",
+      "words_count": 4,
+      "id": "line_04"
+    },
+    {
+      "surah_id": 25,
+      "ayah_id": 60,
+      "surah_name": "سورة الفرقان",
+      "rasm": "وإذا قيل لهم",
+      "vowelled": "وَإِذَا قِيلَ لَهُمُ",
+      "words_count": 3,
+      "id": "line_05"
+    },
+    {
+      "surah_id": 64,
+      "ayah_id": 8,
+      "surah_name": "سورة التغابن",
+      "rasm": "أنزلنا والله بما تعملون خبير",
+      "vowelled": "أَنزَلْنَا وَاللَّهُ بِمَا تَعْمَلُونَ خَبِيرٌ",
+      "words_count": 5,
+      "id": "line_06"
+    },
+    {
+      "surah_id": 68,
+      "ayah_id": 17,
+      "surah_name": "سورة القلم",
+      "rasm": "إنا بلوناهم كما بلونا أصحاب",
+      "vowelled": "إِنَّا بَلَوْنَاهُمْ كَمَا بَلَوْنَا أَصْحَابَ",
+      "words_count": 5,
+      "id": "line_07"
+    },
+    {
+      "surah_id": 41,
+      "ayah_id": 53,
+      "surah_name": "سورة فصلت",
+      "rasm": "أنفسهم حتى يتبين",
+      "vowelled": "أَنفُسِهِمْ حَتَّىٰ يَتَبَيَّنَ",
+      "words_count": 3,
+      "id": "line_08"
+    },
+    {
+      "surah_id": 78,
+      "ayah_id": 9,
+      "surah_name": "سورة النبأ",
+      "rasm": "وجعلنا نومكم سباتا",
+      "vowelled": "وَجَعَلْنَا نَوْمَكُمْ سُبَاتًا",
+      "words_count": 3,
+      "id": "line_09"
+    },
+    {
+      "surah_id": 52,
+      "ayah_id": 13,
+      "surah_name": "سورة الطور",
+      "rasm": "يوم يدعون إلى نار جهنم دعا",
+      "vowelled": "يَوْمَ يُدَعُّونَ إِلَىٰ نَارِ جَهَنَّمَ دَعًّا",
+      "words_count": 6,
+      "id": "line_10"
+    },
+    {
+      "surah_id": 41,
+      "ayah_id": 21,
+      "surah_name": "سورة فصلت",
+      "rasm": "قالوا أنطقنا الله الذي أنطق",
+      "vowelled": "قَالُوا أَنطَقَنَا اللَّهُ الَّذِي أَنطَقَ",
+      "words_count": 5,
+      "id": "line_11"
+    },
+    {
+      "surah_id": 90,
+      "ayah_id": 4,
+      "surah_name": "سورة البلد",
+      "rasm": "لقد خلقنا الإنسان في كبد",
+      "vowelled": "لَقَدْ خَلَقْنَا الْإِنسَانَ فِي كَبَدٍ",
+      "words_count": 5,
+      "id": "line_12"
+    },
+    {
+      "surah_id": 25,
+      "ayah_id": 17,
+      "surah_name": "سورة الفرقان",
+      "rasm": "ويوم يحشرهم وما يعبدون من دون الله",
+      "vowelled": "وَيَوْمَ يَحْشُرُهُمْ وَمَا يَعْبُدُونَ مِن دُونِ اللَّهِ",
+      "words_count": 7,
+      "id": "line_13"
+    },
+    {
+      "surah_id": 25,
+      "ayah_id": 35,
+      "surah_name": "سورة الفرقان",
+      "rasm": "ولقد آتينا موسى الكتاب وجعلنا معه أخاه هارون وزيرا",
+      "vowelled": "وَلَقَدْ آتَيْنَا مُوسَى الْكِتَابَ وَجَعَلْنَا مَعَهُ أَخَاهُ هَارُونَ وَزِيرًا",
+      "words_count": 9,
+      "id": "line_14"
+    },
+    {
+      "surah_id": 25,
+      "ayah_id": 61,
+      "surah_name": "سورة الفرقان",
+      "rasm": "تبارك الذي جعل في السماء بروجا",
+      "vowelled": "تَبَارَكَ الَّذِي جَعَلَ فِي السَّمَاءِ بُرُوجًا",
+      "words_count": 6,
+      "id": "line_15"
+    },
+    {
+      "surah_id": 64,
+      "ayah_id": 11,
+      "surah_name": "سورة التغابن",
+      "rasm": "ما أصاب من مصيبة إلا بإذن الله ومن يؤمن",
+      "vowelled": "مَا أَصَابَ مِن مُّصِيبَةٍ إِلَّا بِإِذْنِ اللَّهِ وَمَن يُؤْمِن",
+      "words_count": 9,
+      "id": "line_16"
+    },
+    {
+      "surah_id": 52,
+      "ayah_id": 46,
+      "surah_name": "سورة الطور",
+      "rasm": "يوم لا يغني عنهم كيدهم شيئا ولا هم ينصرون",
+      "vowelled": "يَوْمَ لَا يُغْنِي عَنْهُمْ كَيْدُهُمْ شَيْئًا وَلَا هُمْ يُنصَرُونَ",
+      "words_count": 9,
+      "id": "line_17"
+    },
+    {
+      "surah_id": 53,
+      "ayah_id": 15,
+      "surah_name": "سورة النجم",
+      "rasm": "عندها جنة المأوى",
+      "vowelled": "عِندَهَا جَنَّةُ الْمَأْوَىٰ",
+      "words_count": 3,
+      "id": "line_18"
+    },
+    {
+      "surah_id": 32,
+      "ayah_id": 4,
+      "surah_name": "سورة السجدة",
+      "rasm": "ولا شفيع أفلا تتذكرون",
+      "vowelled": "وَلَا شَفِيعٍ أَفَلَا تَتَذَكَّرُونَ",
+      "words_count": 4,
+      "id": "line_19"
+    },
+    {
+      "surah_id": 41,
+      "ayah_id": 22,
+      "surah_name": "سورة فصلت",
+      "rasm": "لا يعلم كثيرا مما",
+      "vowelled": "لَا يَعْلَمُ كَثِيرًا مِّمَّا",
+      "words_count": 4,
+      "id": "line_20"
+    },
+    {
+      "surah_id": 41,
+      "ayah_id": 31,
+      "surah_name": "سورة فصلت",
+      "rasm": "نحن أولياؤكم في الحياة الدنيا",
+      "vowelled": "نَحْنُ أَوْلِيَاؤُكُمْ فِي الْحَيَاةِ الدُّنْيَا",
+      "words_count": 5,
+      "id": "line_21"
+    },
+    {
+      "surah_id": 44,
+      "ayah_id": 51,
+      "surah_name": "سورة الدخان",
+      "rasm": "إن المتقين في مقام أمين",
+      "vowelled": "إِنَّ الْمُتَّقِينَ فِي مَقَامٍ أَمِينٍ",
+      "words_count": 5,
+      "id": "line_22"
+    },
+    {
+      "surah_id": 32,
+      "ayah_id": 10,
+      "surah_name": "سورة السجدة",
+      "rasm": "هم بلقاء ربهم كافرون",
+      "vowelled": "هُم بِلِقَاءِ رَبِّهِمْ كَافِرُونَ",
+      "words_count": 4,
+      "id": "line_23"
+    },
+    {
+      "surah_id": 76,
+      "ayah_id": 9,
+      "surah_name": "سورة الإنسان",
+      "rasm": "إنما نطعمكم لوجه الله لا",
+      "vowelled": "إِنَّمَا نُطْعِمُكُمْ لِوَجْهِ اللَّهِ لَا",
+      "words_count": 5,
+      "id": "line_24"
+    },
+    {
+      "surah_id": 1,
+      "ayah_id": 2,
+      "surah_name": "سورة الفاتحة",
+      "rasm": "الحمد لله رب العالمين",
+      "vowelled": "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ",
+      "words_count": 4,
+      "id": "line_25"
+    },
+    {
+      "surah_id": 11,
+      "ayah_id": 64,
+      "surah_name": "سورة هود",
+      "rasm": "ويا قوم هذه ناقة",
+      "vowelled": "وَيَا قَوْمِ هَٰذِهِ نَاقَةُ",
+      "words_count": 4,
+      "id": "line_26"
+    },
+    {
+      "surah_id": 11,
+      "ayah_id": 57,
+      "surah_name": "سورة هود",
+      "rasm": "إن ربي على كل",
+      "vowelled": "إِنَّ رَبِّي عَلَىٰ كُلِّ",
+      "words_count": 4,
+      "id": "line_27"
+    },
+    {
+      "surah_id": 11,
+      "ayah_id": 14,
+      "surah_name": "سورة هود",
+      "rasm": "إله إلا هو فهل أنتم",
+      "vowelled": "إِلَٰهَ إِلَّا هُوَ فَهَلْ أَنتُم",
+      "words_count": 5,
+      "id": "line_28"
+    },
+    {
+      "surah_id": 11,
+      "ayah_id": 32,
+      "surah_name": "سورة هود",
+      "rasm": "قالوا يا نوح قد",
+      "vowelled": "قَالُوا يَا نُوحُ قَدْ",
+      "words_count": 4,
+      "id": "line_29"
+    },
+    {
+      "surah_id": 41,
+      "ayah_id": 25,
+      "surah_name": "سورة فصلت",
+      "rasm": "قد خلت من قبلهم من الجن",
+      "vowelled": "قَدْ خَلَتْ مِن قَبْلِهِم مِّنَ الْجِنِّ",
+      "words_count": 6,
+      "id": "line_30"
+    },
+    {
+      "surah_id": 92,
+      "ayah_id": 18,
+      "surah_name": "سورة الليل",
+      "rasm": "الذي يؤتي ماله يتزكى",
+      "vowelled": "الَّذِي يُؤْتِي مَالَهُ يَتَزَكَّىٰ",
+      "words_count": 4,
+      "id": "line_31"
+    },
+    {
+      "surah_id": 41,
+      "ayah_id": 14,
+      "surah_name": "سورة فصلت",
+      "rasm": "ربنا لأنزل ملائكة",
+      "vowelled": "رَبُّنَا لَأَنزَلَ مَلَائِكَةً",
+      "words_count": 3,
+      "id": "line_32"
+    },
+    {
+      "surah_id": 53,
+      "ayah_id": 45,
+      "surah_name": "سورة النجم",
+      "rasm": "وأنه خلق الزوجين الذكر والأنثى",
+      "vowelled": "وَأَنَّهُ خَلَقَ الزَّوْجَيْنِ الذَّكَرَ وَالْأُنثَىٰ",
+      "words_count": 5,
+      "id": "line_33"
+    },
+    {
+      "surah_id": 11,
+      "ayah_id": 14,
+      "surah_name": "سورة هود",
+      "rasm": "أنزل بعلم الله وأن لا إله إلا هو فهل",
+      "vowelled": "أُنزِلَ بِعِلْمِ اللَّهِ وَأَن لَّا إِلَٰهَ إِلَّا هُوَ فَهَلْ",
+      "words_count": 9,
+      "id": "line_34"
+    },
+    {
+      "surah_id": 32,
+      "ayah_id": 1,
+      "surah_name": "سورة السجدة",
+      "rasm": "بسم الله الرحمن الرحيم الم",
+      "vowelled": "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ الم",
+      "words_count": 5,
+      "id": "line_35"
+    },
+    {
+      "surah_id": 44,
+      "ayah_id": 11,
+      "surah_name": "سورة الدخان",
+      "rasm": "يغشى الناس هذا عذاب أليم",
+      "vowelled": "يَغْشَى النَّاسَ هَٰذَا عَذَابٌ أَلِيمٌ",
+      "words_count": 5,
+      "id": "line_36"
+    },
+    {
+      "surah_id": 25,
+      "ayah_id": 21,
+      "surah_name": "سورة الفرقان",
+      "rasm": "وقال الذين لا يرجون لقاءنا لولا",
+      "vowelled": "وَقَالَ الَّذِينَ لَا يَرْجُونَ لِقَاءَنَا لَوْلَا",
+      "words_count": 6,
+      "id": "line_37"
+    },
+    {
+      "surah_id": 11,
+      "ayah_id": 3,
+      "surah_name": "سورة هود",
+      "rasm": "أجل مسمى ويؤت كل",
+      "vowelled": "أَجَلٍ مُّسَمًّى وَيُؤْتِ كُلَّ",
+      "words_count": 4,
+      "id": "line_38"
+    },
+    {
+      "surah_id": 25,
+      "ayah_id": 3,
+      "surah_name": "سورة الفرقان",
+      "rasm": "ولا يملكون موتا",
+      "vowelled": "وَلَا يَمْلِكُونَ مَوْتًا",
+      "words_count": 3,
+      "id": "line_39"
+    },
+    {
+      "surah_id": 52,
+      "ayah_id": 37,
+      "surah_name": "سورة الطور",
+      "rasm": "أم عندهم خزائن ربك أم هم المصيطرون",
+      "vowelled": "أَمْ عِندَهُمْ خَزَائِنُ رَبِّكَ أَمْ هُمُ الْمُصَيْطِرُونَ",
+      "words_count": 7,
+      "id": "line_40"
+    }
+  ],
+  "words": [
+    {
+      "rasm": "بينك",
+      "vowelled": "بَيْنَكَ",
+      "surah_id": 41,
+      "surah_name": "سورة فصلت",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_01"
+    },
+    {
+      "rasm": "فيها",
+      "vowelled": "فِيهَا",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 44,
+      "id": "word_02"
+    },
+    {
+      "rasm": "والله",
+      "vowelled": "وَاللَّهُ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 15,
+      "id": "word_03"
+    },
+    {
+      "rasm": "أنزله",
+      "vowelled": "أَنزَلَهُ",
+      "surah_id": 25,
+      "surah_name": "سورة الفرقان",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_04"
+    },
+    {
+      "rasm": "يوم",
+      "vowelled": "يَوْمِ",
+      "surah_id": 1,
+      "surah_name": "سورة الفاتحة",
+      "category": "frequent",
+      "freq_in_test": 35,
+      "id": "word_05"
+    },
+    {
+      "rasm": "دون",
+      "vowelled": "دُونِ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 12,
+      "id": "word_06"
+    },
+    {
+      "rasm": "وهو",
+      "vowelled": "وَهُوَ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 20,
+      "id": "word_07"
+    },
+    {
+      "rasm": "الله",
+      "vowelled": "اللَّهِ",
+      "surah_id": 1,
+      "surah_name": "سورة الفاتحة",
+      "category": "frequent",
+      "freq_in_test": 118,
+      "id": "word_08"
+    },
+    {
+      "rasm": "حفيظ",
+      "vowelled": "حَفِيظٌ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_09"
+    },
+    {
+      "rasm": "كيدهم",
+      "vowelled": "كَيْدُهُمْ",
+      "surah_id": 52,
+      "surah_name": "سورة الطور",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_10"
+    },
+    {
+      "rasm": "لدن",
+      "vowelled": "لَّدُنْ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_11"
+    },
+    {
+      "rasm": "الحطب",
+      "vowelled": "الْحَطَبِ",
+      "surah_id": 111,
+      "surah_name": "سورة المسد",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_12"
+    },
+    {
+      "rasm": "لحب",
+      "vowelled": "لِحُبِّ",
+      "surah_id": 100,
+      "surah_name": "سورة العاديات",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_13"
+    },
+    {
+      "rasm": "طباقا",
+      "vowelled": "طِبَاقًا",
+      "surah_id": 71,
+      "surah_name": "سورة نوح",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_14"
+    },
+    {
+      "rasm": "ليذكروا",
+      "vowelled": "لِيَذَّكَّرُوا",
+      "surah_id": 25,
+      "surah_name": "سورة الفرقان",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_15"
+    },
+    {
+      "rasm": "يسر",
+      "vowelled": "يَسْرِ",
+      "surah_id": 89,
+      "surah_name": "سورة الفجر",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_16"
+    },
+    {
+      "rasm": "الرحمن",
+      "vowelled": "الرَّحْمَٰنِ",
+      "surah_id": 1,
+      "surah_name": "سورة الفاتحة",
+      "category": "frequent",
+      "freq_in_test": 37,
+      "id": "word_17"
+    },
+    {
+      "rasm": "ربك",
+      "vowelled": "رَّبِّكَ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 58,
+      "id": "word_18"
+    },
+    {
+      "rasm": "إلى",
+      "vowelled": "إِلَىٰ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 46,
+      "id": "word_19"
+    },
+    {
+      "rasm": "وإستبرق",
+      "vowelled": "وَإِسْتَبْرَقٍ",
+      "surah_id": 44,
+      "surah_name": "سورة الدخان",
+      "category": "rare",
+      "freq_in_test": 2,
+      "id": "word_20"
+    },
+    {
+      "rasm": "هذا",
+      "vowelled": "هَٰذَا",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 25,
+      "id": "word_21"
+    },
+    {
+      "rasm": "وما",
+      "vowelled": "وَمَا",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 71,
+      "id": "word_22"
+    },
+    {
+      "rasm": "ذوقوا",
+      "vowelled": "ذُوقُوا",
+      "surah_id": 32,
+      "surah_name": "سورة السجدة",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_23"
+    },
+    {
+      "rasm": "دعوت",
+      "vowelled": "دَعَوْتُ",
+      "surah_id": 71,
+      "surah_name": "سورة نوح",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_24"
+    },
+    {
+      "rasm": "إنه",
+      "vowelled": "إِنَّهُ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 25,
+      "id": "word_25"
+    },
+    {
+      "rasm": "واتخذوا",
+      "vowelled": "وَاتَّخَذُوا",
+      "surah_id": 25,
+      "surah_name": "سورة الفرقان",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_26"
+    },
+    {
+      "rasm": "تعملون",
+      "vowelled": "تَعْمَلُونَ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 12,
+      "id": "word_27"
+    },
+    {
+      "rasm": "وكان",
+      "vowelled": "وَكَانَ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 10,
+      "id": "word_28"
+    },
+    {
+      "rasm": "ألا",
+      "vowelled": "أَلَّا",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 15,
+      "id": "word_29"
+    },
+    {
+      "rasm": "يبعثوا",
+      "vowelled": "يُبْعَثُوا",
+      "surah_id": 64,
+      "surah_name": "سورة التغابن",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_30"
+    },
+    {
+      "rasm": "يأتيكم",
+      "vowelled": "يَأْتِيكُم",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_31"
+    },
+    {
+      "rasm": "وقال",
+      "vowelled": "وَقَالَ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 12,
+      "id": "word_32"
+    },
+    {
+      "rasm": "ويعبدون",
+      "vowelled": "وَيَعْبُدُونَ",
+      "surah_id": 25,
+      "surah_name": "سورة الفرقان",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_33"
+    },
+    {
+      "rasm": "ومن",
+      "vowelled": "وَمِن",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 28,
+      "id": "word_34"
+    },
+    {
+      "rasm": "لما",
+      "vowelled": "لَّمَّا",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 13,
+      "id": "word_35"
+    },
+    {
+      "rasm": "والحكمة",
+      "vowelled": "وَالْحِكْمَةَ",
+      "surah_id": 62,
+      "surah_name": "سورة الجمعة",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_36"
+    },
+    {
+      "rasm": "هديناه",
+      "vowelled": "هَدَيْنَاهُ",
+      "surah_id": 76,
+      "surah_name": "سورة الإنسان",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_37"
+    },
+    {
+      "rasm": "ابن",
+      "vowelled": "ابْنُ",
+      "surah_id": 43,
+      "surah_name": "سورة الزخرف",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_38"
+    },
+    {
+      "rasm": "يحملوها",
+      "vowelled": "يَحْمِلُوهَا",
+      "surah_id": 62,
+      "surah_name": "سورة الجمعة",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_39"
+    },
+    {
+      "rasm": "ولقد",
+      "vowelled": "وَلَقَدْ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 15,
+      "id": "word_40"
+    },
+    {
+      "rasm": "وقالوا",
+      "vowelled": "وَقَالُوا",
+      "surah_id": 25,
+      "surah_name": "سورة الفرقان",
+      "category": "frequent",
+      "freq_in_test": 12,
+      "id": "word_41"
+    },
+    {
+      "rasm": "وأخذ",
+      "vowelled": "وَأَخَذَ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_42"
+    },
+    {
+      "rasm": "خلق",
+      "vowelled": "خَلَقَ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 16,
+      "id": "word_43"
+    },
+    {
+      "rasm": "وملئه",
+      "vowelled": "وَمَلَئِهِ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "rare",
+      "freq_in_test": 2,
+      "id": "word_44"
+    },
+    {
+      "rasm": "نوح",
+      "vowelled": "نُوحُ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 11,
+      "id": "word_45"
+    },
+    {
+      "rasm": "هيه",
+      "vowelled": "هِيَهْ",
+      "surah_id": 101,
+      "surah_name": "سورة القارعة",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_46"
+    },
+    {
+      "rasm": "وإذا",
+      "vowelled": "وَإِذَا",
+      "surah_id": 25,
+      "surah_name": "سورة الفرقان",
+      "category": "frequent",
+      "freq_in_test": 13,
+      "id": "word_47"
+    },
+    {
+      "rasm": "قوم",
+      "vowelled": "قَوْمِ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 32,
+      "id": "word_48"
+    },
+    {
+      "rasm": "عذاب",
+      "vowelled": "عَذَابَ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 27,
+      "id": "word_49"
+    },
+    {
+      "rasm": "وإدبار",
+      "vowelled": "وَإِدْبَارَ",
+      "surah_id": 52,
+      "surah_name": "سورة الطور",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_50"
+    },
+    {
+      "rasm": "ويخافون",
+      "vowelled": "وَيَخَافُونَ",
+      "surah_id": 76,
+      "surah_name": "سورة الإنسان",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_51"
+    },
+    {
+      "rasm": "إني",
+      "vowelled": "إِنِّي",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 18,
+      "id": "word_52"
+    },
+    {
+      "rasm": "فلا",
+      "vowelled": "فَلَا",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 14,
+      "id": "word_53"
+    },
+    {
+      "rasm": "لنخرج",
+      "vowelled": "لِّنُخْرِجَ",
+      "surah_id": 78,
+      "surah_name": "سورة النبأ",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_54"
+    },
+    {
+      "rasm": "اللات",
+      "vowelled": "اللَّاتَ",
+      "surah_id": 53,
+      "surah_name": "سورة النجم",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_55"
+    },
+    {
+      "rasm": "قالوا",
+      "vowelled": "قَالُوا",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 24,
+      "id": "word_56"
+    },
+    {
+      "rasm": "علمه",
+      "vowelled": "عَلَّمَهُ",
+      "surah_id": 53,
+      "surah_name": "سورة النجم",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_57"
+    },
+    {
+      "rasm": "بما",
+      "vowelled": "بِمَا",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 34,
+      "id": "word_58"
+    },
+    {
+      "rasm": "شيء",
+      "vowelled": "شَيْءٍ",
+      "surah_id": 11,
+      "surah_name": "سورة هود",
+      "category": "frequent",
+      "freq_in_test": 15,
+      "id": "word_59"
+    },
+    {
+      "rasm": "يبيتون",
+      "vowelled": "يَبِيتُونَ",
+      "surah_id": 25,
+      "surah_name": "سورة الفرقان",
+      "category": "rare",
+      "freq_in_test": 1,
+      "id": "word_60"
+    }
+  ]
+}

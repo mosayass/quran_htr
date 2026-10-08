@@ -307,7 +307,7 @@ def generate_diac_split(
     sw_bounds = cfg["calibration_bounds"]["stroke_width"]
     fr_bounds = cfg["calibration_bounds"]["ink_fraction"]
     sw_min, sw_max = sw_bounds["min"], sw_bounds["max"]
-    fr_min, fr_max = fr_bounds["min"], fr_bounds["max"]
+    fr_min, fr_max = fr_bounds["min"], 0.160  # Relaxed upper ink fraction to accommodate diacritic marks
     max_w = cfg["constraints"]["max_width_px"]
 
     stream = _get_stream()
@@ -326,8 +326,11 @@ def generate_diac_split(
         if quota <= 0:
             continue
         count_font = 0
-        while count_font < quota:
+        attempts_this_font = 0
+        max_attempts_font = max(quota * 15, 100)
+        while count_font < quota and attempts_this_font < max_attempts_font:
             total_attempts += 1
+            attempts_this_font += 1
             n_words = rng_py.randint(3, 9)
             clean_text, vowelled_text, sura = stream.sample_window(
                 split="test", min_words=n_words, max_words=n_words, rng=rng_py

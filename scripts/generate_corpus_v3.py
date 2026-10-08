@@ -560,6 +560,17 @@ def main():
         print(f"  {r['split']:20s}: {r['count']:5d} lines in {r['elapsed']:.1f}s ({r['throughput']:.1f} l/s)")
     print("=" * 75)
 
+    import zipfile
+    dist_dir = ROOT / "dist"
+    dist_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = dist_dir / "shards_corpus_v3.zip"
+    print(f"\nZipping {CORPUS_V3_DIR} -> {zip_path}...")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for pt_file in sorted(CORPUS_V3_DIR.glob("*.pt")):
+            zf.write(pt_file, arcname=pt_file.name)
+            print(f"  Added {pt_file.name} ({pt_file.stat().st_size / (1024*1024):.1f} MB)")
+    print(f"Finished: {zip_path.name} created successfully ({zip_path.stat().st_size / (1024*1024):.1f} MB)")
+
 
 if __name__ == "__main__":
     main()

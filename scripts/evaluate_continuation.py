@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT))
 
 from vocab import Vocabulary
 from model import CRNN
+from dataset import collate_fn
 from shards import ShardDataset
 from evaluate import evaluate
 
@@ -55,7 +56,7 @@ def eval_checkpoint_on_shards(
             continue
 
         ds = ShardDataset(shard_path, vocab, augment=False, label_order=label_order)
-        loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
+        loader = DataLoader(ds, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
         cer, wer, _ = evaluate(model, loader, vocab, device, label_order=label_order, max_samples_display=0)
         results[name] = (cer * 100, wer * 100)
         print(f"  [{name:28s}] CER: {cer*100:5.2f}% | WER: {wer*100:5.2f}%")
@@ -65,8 +66,8 @@ def eval_checkpoint_on_shards(
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--best_ckpt", default="checkpoints/best.pt")
-    p.add_argument("--best_real_ckpt", default="checkpoints/best_real.pt")
+    p.add_argument("--best_ckpt", default="checkpoints/cont_best.pt")
+    p.add_argument("--best_real_ckpt", default="checkpoints/cont_best_real.pt")
     p.add_argument("--vocab_path", default="vocab.json")
     p.add_argument("--batch_size", type=int, default=32)
     args = p.parse_args()

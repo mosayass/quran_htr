@@ -161,3 +161,33 @@ def decode_output(log_probs: np.ndarray, vocab: list[str], label_order: str = "v
         text = text[::-1]
     return text
 ```
+
+---
+
+## 8. Digital Ink Rendering & Ruled Band Cropping Specification
+
+This section specifies the standard contract for vector-to-raster conversion when ingesting handwritten digital ink (e.g. from the web capture canvas or stylus input).
+
+### 8.1 Stroke Rendering Rule (Constant Thickness)
+- **Scale Factor**: Exported line stroke width is locked strictly to:
+  $$W_{\text{stroke}} = 0.044 \times H_{\text{band}}$$
+- **Export Resolution ($H_{\text{band}} = 64\text{ px}$)**:
+  $$W_{\text{stroke}} = 0.044 \times 64 = 2.816\text{ px}$$
+- **Calibrated Range**:
+  Guarantees the rendered ink falls strictly within the KHATT-calibrated real human handwriting stroke width bounds ($2.4–3.4\text{ px}$).
+- **Pressure Invariance**:
+  While user-facing interactive canvases may display stylistic pressure variation for natural tactile feel, exported rasters MUST be rendered with uniform stroke width ($0.044 \times H_{\text{band}}$) to maintain domain parity with the synthetic training corpus.
+
+### 8.2 Ruled Band Cropping Policy
+- **Three-Guide Layout**:
+  Writing grids feature 3 horizontal references:
+  1. Ascender Guide ($Y_{\text{top}}$)
+  2. Baseline Guide ($Y_{\text{base}}$)
+  3. Descender Guide ($Y_{\text{bot}}$)
+- **Vertical Crop Window**:
+  Vertical cropping spans exclusively between the ascender and descender guidelines ($H_{\text{band}} = Y_{\text{bot}} - Y_{\text{top}}$). Out-of-band canvas margins are excised.
+- **Horizontal Crop Bounds**:
+  Horizontal cropping tightly bounds all captured ink strokes with an added horizontal safety margin of $16\text{ px}$:
+  $$X_1 = \max(0, X_{\min} - 16), \quad X_2 = \min(W_{\text{canvas}}, X_{\max} + 16)$$
+- **Raster Downscaling**:
+  Downscale from native capture canvas resolution to canonical $H=64\text{ px}$ using high-quality image smoothing (`imageSmoothingQuality = 'high'` / Bicubic interpolation). Pad rightwards with pure white background ($255$) to a multiple of 32px.

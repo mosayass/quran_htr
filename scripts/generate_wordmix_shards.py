@@ -312,16 +312,22 @@ def main():
     quotas_val = compute_font_quotas(train_font_paths, weights_map, 3000)
     quotas_test = compute_font_quotas(train_font_paths, weights_map, 3000)
 
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test_only", action="store_true", help="Generate only wordmix_test (3,000 lines)")
+    args = parser.parse_args()
+
     num_workers = min(3, os.cpu_count() or 2)
     total_hist = Counter()
 
-    print(f"\n[1/3] Generating wordmix_train (60,000 lines)...", flush=True)
-    _, h_train = generate_wordmix_split("wordmix_train", "train", quotas_train, cfg, WORDMIX_SHARDS_DIR, seed=101, num_workers=num_workers)
-    total_hist += h_train
+    if not args.test_only:
+        print(f"\n[1/3] Generating wordmix_train (60,000 lines)...", flush=True)
+        _, h_train = generate_wordmix_split("wordmix_train", "train", quotas_train, cfg, WORDMIX_SHARDS_DIR, seed=101, num_workers=num_workers)
+        total_hist += h_train
 
-    print(f"\n[2/3] Generating wordmix_val (3,000 lines)...", flush=True)
-    _, h_val = generate_wordmix_split("wordmix_val", "val", quotas_val, cfg, WORDMIX_SHARDS_DIR, seed=202, num_workers=num_workers)
-    total_hist += h_val
+        print(f"\n[2/3] Generating wordmix_val (3,000 lines)...", flush=True)
+        _, h_val = generate_wordmix_split("wordmix_val", "val", quotas_val, cfg, WORDMIX_SHARDS_DIR, seed=202, num_workers=num_workers)
+        total_hist += h_val
 
     print(f"\n[3/3] Generating wordmix_test (3,000 lines)...", flush=True)
     _, h_test = generate_wordmix_split("wordmix_test", "test", quotas_test, cfg, WORDMIX_SHARDS_DIR, seed=303, num_workers=num_workers)

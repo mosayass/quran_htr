@@ -22,6 +22,7 @@ logs/
 
 # Data and manifests (keep raw dataset and generated manifests local)
 data/
+!data/capture_prompts.json
 manifests/
 tiny_khatt/
 test_ckpt/
