@@ -36,7 +36,7 @@ from model import CRNN
 from dataset import collate_fn, LineImageDataset
 from shards import ShardDataset
 from evaluate import evaluate, greedy_decode
-from metrics import cer as compute_cer, wer as compute_wer
+from metrics import corpus_cer_wer
 
 DOT_LETTERS = set("بتثني")
 
@@ -104,16 +104,17 @@ def evaluate_bucketed(
                 buckets[b_key]["preds"].append(p)
                 buckets[b_key]["targets"].append(t)
 
-    overall_cer = compute_cer(all_preds, all_targets) if all_preds else float("nan")
-    overall_wer = compute_wer(all_preds, all_targets) if all_preds else float("nan")
+    if all_preds:
+        overall_cer, overall_wer = corpus_cer_wer(all_preds, all_targets)
+    else:
+        overall_cer, overall_wer = float("nan"), float("nan")
 
     dot_confusions, dot_pairs = count_dot_letter_confusions(all_preds, all_targets)
 
     bucket_stats = {}
     for b_key, b_data in buckets.items():
         if b_data["preds"]:
-            b_cer = compute_cer(b_data["preds"], b_data["targets"])
-            b_wer = compute_wer(b_data["preds"], b_data["targets"])
+            b_cer, b_wer = corpus_cer_wer(b_data["preds"], b_data["targets"])
             bucket_stats[b_key] = (b_cer * 100, b_wer * 100, len(b_data["preds"]))
         else:
             bucket_stats[b_key] = (float("nan"), float("nan"), 0)
@@ -140,14 +141,45 @@ def main():
     vocab = Vocabulary.load(args.vocab_path)
     print(f"Device: {device} | Checkpoints to evaluate: {args.checkpoints}")
 
-    test_sets = {
-        "KHATT Test (Real)": ROOT / "data" / "shards" / "khatt" / "khatt_test_000.pt",
+    # Look for KHATT test and val shards
+    khatt_test_path = ROOT / "data" / "shards" / "khatt" / "khatt_test_000.pt"
+    if not khatt_test_path.exists():
+        for candidate in [
+            Path("/content/data/shards/khatt/khatt_test_000.pt"),
+            Path("/content/drive/MyDrive/quran_htr_data/khatt_test_000.pt"),
+            Path("/content/drive/MyDrive/quran_htr_data/shards/khatt/khatt_test_000.pt"),
+            Path("/content/drive/MyDrive/shards_khatt/khatt_test_000.pt"),
+            Path("/content/drive/MyDrive/khatt_test_000.pt"),
+        ]:
+            if candidate.exists():
+                khatt_test_path = candidate
+                break
+
+    khatt_val_path = ROOT / "data" / "shards" / "khatt" / "khatt_val_000.pt"
+    if not khatt_val_path.exists():
+        for candidate in [
+            Path("/content/data/shards/khatt/khatt_val_000.pt"),
+            Path("/content/drive/MyDrive/quran_htr_data/khatt_val_000.pt"),
+            Path("/content/drive/MyDrive/quran_htr_data/shards/khatt/khatt_val_000.pt"),
+            Path("/content/drive/MyDrive/shards_khatt/khatt_val_000.pt"),
+        ]:
+            if candidate.exists():
+                khatt_val_path = candidate
+                break
+
+    test_sets = {}
+    if khatt_test_path.exists():
+        test_sets["KHATT Test (Real)"] = khatt_test_path
+    if khatt_val_path.exists():
+        test_sets["KHATT Val (Real)"] = khatt_val_path
+
+    test_sets.update({
         "Synth Test (Clean Rasm)": ROOT / "data" / "shards" / "synth" / "synth_test_000.pt",
         "Synth Test Diac (Marks On)": ROOT / "data" / "shards" / "synth" / "synth_test_diac_000.pt",
         "Unseen Fonts Diac": ROOT / "data" / "shards" / "synth" / "synth_test_unseen_fonts_diac_000.pt",
         "Wordmix Test Set": ROOT / "data" / "shards" / "wordmix" / "wordmix_test_000.pt",
         "Corpus v3 Test Set": ROOT / "data" / "shards" / "corpus_v3" / "corpus_v3_test_000.pt",
-    }
+    })
 
     # Include capture set if present
     capture_csv = ROOT / "data" / "capture" / "manifest.csv"
