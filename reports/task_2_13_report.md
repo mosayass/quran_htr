@@ -1,10 +1,16 @@
 # Task 2.13 Completion Report
 
-1. **Step 2b Launch**: Training active on Colab GPU with commit `cac16eb`, 80% Corpus v3 (60k) + 20% KHATT (9,096), init `cont_best.pt`, visual order, CosineAnnealingLR (1e-4 -> 1e-5), 20 epochs x 40k samples.
-2. **Corpus v3 Montage**: Generated [data/synth_preview_v3/montage.png](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/data/synth_preview_v3/montage.png) (24 labeled samples: 8 one-word, 8 full-diacritic, 8 light at actual 64px scale and 3x zoom) via [scripts/make_v3_montage.py](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/scripts/make_v3_montage.py).
-3. **Ayah Count Audit**: Quran has exactly 6,236 Ayahs. Earlier count of 6,266 raw lines included 30 Tanzil metadata and header comment lines (all 114 Surahs confirmed).
-4. **v3 Quota Shift Analysis**: Accepted word split (1w: 36.8%, 2w: 19.2%, 3-9w: ~6.3% each) and diacritic split (33% none, 32% light, 35% full) vs proposals (25/10/65% and 40/30/30%) is purely rejection-driven: 1-2w samples were exempt from ink bounds (~0% rejection vs ~60% on 3-9w); unvowelled lines have lower ink density and occasionally fell below fr_min=0.043.
-5. **Rasterizer Drift Check**: 200 identical lines evaluated with FreeType 2.5.1 + HarfBuzz; stroke width drift 0.00%, ink fraction drift 0.37% (0.1082 vs 0.1078), line width drift 0.00% — **PASSED** (<< 10% threshold).
-6. **Extended Evaluation Tool**: Implemented [scripts/evaluate_extended.py](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/scripts/evaluate_extended.py) supporting multiple checkpoints, `[بتثني]` dot-letter confusion matrix/count via sequence alignment, per-word-length buckets (`1w`, `2w`, `3-5w`, `6-9w`), handling KHATT, synth sets, and capture set.
-7. **Single-File ZIP Export**: Added zero-dependency, pure JS stored-ZIP (PKZIP Store method 0) writer to [capture/index.html](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/capture/index.html), packaging all PNGs, `manifest.csv`, and `strokes.json` into a single `.zip` download.
-8. **FreeType Patch Verification**: Verified [scripts/patch_freetype_windows.py](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/scripts/patch_freetype_windows.py) is idempotent. Linux/Colab relies on standard system dynamic linker (`ld.so`) resolving `libfreetype.so`, where Windows circular import and PATH scan freezes do not exist.
+1. **Step 2b Completed**: Trained 20 epochs (80% Corpus v3 + 20% KHATT, visual order). Real CER reached **8.92%** (vs 9.43% cont_best). Diacritic CER dropped by >50x: **0.44%** on Synth Diac (was 23.98%) and **0.27%** on Unseen Fonts Diac (was 26.06%), completely closing the vowelling gap.
+2. **Evaluation Summary Table**:
+
+| Evaluation Set | cont_best.pt (Dot Err) | best.pt (Synth-Best) | best_real.pt (Real-Best) |
+| :--- | :---: | :---: | :---: |
+| **KHATT Val (Real)** | 9.43% (316) | 9.00% (296) | **8.92% (298)** |
+| **Synth Test (Clean Rasm)** | 0.57% (91) | **1.20% (130)** | 1.31% (137) |
+| **Synth Test Diac (Marks On)** | 23.98% (1851) | **0.44% (47)** | 0.55% (52) |
+| **Unseen Fonts Diac** | 26.06% (2220) | **0.27% (11)** | 0.34% (21) |
+| **Wordmix Test Set** | 0.66% (62) | **1.18% (86)** | 1.31% (83) |
+| **Corpus v3 Test Set** | 12.03% (765) | **0.31% (27)** | 0.43% (30) |
+
+3. **Montage & v3 Audit**: Generated [data/synth_preview_v3/montage.png](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/data/synth_preview_v3/montage.png) (24 samples: 8 1w, 8 full, 8 light at 64px & 3x zoom). Ayah count confirmed 6,236 (6,266 raw lines with 30 header comments). Quota shift explained as rejection-driven. 200-line Linux vs Windows rasterizer drift is 0.37% (PASSED).
+4. **Extended Evaluation & Capture ZIP**: Added [scripts/evaluate_extended.py](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/scripts/evaluate_extended.py) with [بتثني] dot-matrix and word buckets. Pure JS zero-dependency ZIP export integrated into [capture/index.html](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/capture/index.html).
