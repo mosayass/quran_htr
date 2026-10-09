@@ -23,6 +23,9 @@ logs/
 # Data and manifests (keep raw dataset and generated manifests local)
 data/
 !data/capture_prompts.json
+!data/tanzil/quran-simple.txt
+!data/tanzil/quran-simple-clean.txt
+!data/tanzil/quran-uthmani.txt
 manifests/
 tiny_khatt/
 test_ckpt/
