@@ -188,6 +188,11 @@
       <button class="mode-btn active" id="modeLineBtn" onclick="setMode('line')">وضع السطر (Line: 3-9 كلمات)</button>
       <button class="mode-btn" id="modeWordBtn" onclick="setMode('word')">وضع الكلمة (Word: كلمة واحدة)</button>
     </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem;">
+      <label>Writer: <input id="writerIdInput" type="text" value="writer_01" style="background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; width: 80px;" /></label>
+      <label>Device: <input id="deviceInput" type="text" value="tablet" style="background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; width: 80px;" /></label>
+      <label>Stylus: <input id="stylusInput" type="text" value="active_pen" style="background: var(--card-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; width: 80px;" /></label>
+    </div>
   </div>
 
   <div class="prompt-box">
@@ -752,10 +757,11 @@
     let currentStroke = [];
     let strokes = []; // Array of strokes
 
-    // 3 Ruled guide lines (normalized coordinates)
-    const GUIDE_TOP_Y = 50;      // Ascender line
-    const GUIDE_BASE_Y = 160;    // Baseline
-    const GUIDE_BOT_Y = 200;     // Descender line
+    // 3 Ruled guide lines (tightened so median ink extent ~35px is ~0.73 of band height)
+    // Band height = 165 - 117 = 48px -> median extent 35px / 48px = 73% (within 0.7 - 0.8)
+    const GUIDE_TOP_Y = 117;     // Ascender line
+    const GUIDE_BASE_Y = 152;    // Baseline
+    const GUIDE_BOT_Y = 165;     // Descender line
 
     function resizeCanvas() {
       const rect = canvas.getBoundingClientRect();
@@ -989,12 +995,19 @@
       const prompts = getPrompts();
       const p = prompts[currentIndex];
       const sampleId = `sample_${currentMode}_${String(currentIndex + 1).padStart(3, '0')}`;
+      const writerId = document.getElementById('writerIdInput') ? document.getElementById('writerIdInput').value.trim() : 'writer_01';
+      const deviceName = document.getElementById('deviceInput') ? document.getElementById('deviceInput').value.trim() : 'tablet';
+      const stylusName = document.getElementById('stylusInput') ? document.getElementById('stylusInput').value.trim() : 'active_pen';
 
       savedSamples.push({
         id: sampleId,
         mode: currentMode,
         text: p.rasm, // Manifest labels stay strictly rasm-only (simple-clean)
         prompt_display: (promptDisplayMode === 'vowelled') ? p.vowelled : p.rasm,
+        prompt_type: promptDisplayMode,
+        writer_id: writerId,
+        device: deviceName,
+        stylus: stylusName,
         surah: p.surah,
         strokes: JSON.parse(JSON.stringify(strokes)),
         dataUrl: dataUrl
@@ -1132,10 +1145,10 @@
 
       const files = [];
 
-      // 1. Generate Manifest CSV
-      let csv = "sample_id,image_file,mode,transcription\n";
+      // 1. Generate Manifest CSV with all metadata fields
+      let csv = "sample_id,image_file,mode,transcription,writer_id,device,stylus,prompt_type\n";
       for (const s of savedSamples) {
-        csv += `${s.id},${s.id}.png,${s.mode},"${s.text}"\n`;
+        csv += `${s.id},${s.id}.png,${s.mode},"${s.text}",${s.writer_id},${s.device},${s.stylus},${s.prompt_type}\n`;
       }
       files.push({
         name: "manifest.csv",

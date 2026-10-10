@@ -191,3 +191,20 @@ This section specifies the standard contract for vector-to-raster conversion whe
   $$X_1 = \max(0, X_{\min} - 16), \quad X_2 = \min(W_{\text{canvas}}, X_{\max} + 16)$$
 - **Raster Downscaling**:
   Downscale from native capture canvas resolution to canonical $H=64\text{ px}$ using high-quality image smoothing (`imageSmoothingQuality = 'high'` / Bicubic interpolation). Pad rightwards with pure white background ($255$) to a multiple of 32px.
+
+---
+
+### 8.3 Stroke-Width Empirical Findings & Candidate Preprocessing Policy (Provisional)
+
+- **Stroke-Width Sensitivity**:
+  Diagnostic re-render sweeps on tablet vector strokes demonstrated that the CNN backbone is sensitive to stroke dilation:
+  - Uniform thin-to-medium stroke ($1.8–2.2\text{ px}$ post-zoom) achieves optimal character recognition.
+  - Heavier strokes ($3.6\text{ px}$) severely degrade CER to $37.5\%$.
+  - Stylus pressure-varying stroke width degrades CER to $39.8\%$ due to inconsistent ink mass across character bodies and diacritics. Constant stroke rendering is strictly enforced.
+- **Scale & Vertical Geometry**:
+  A fixed wide ruled band ($H_{\text{band}} = 150\text{ px}$) caused digital stylus handwriting to occupy only $35\text{ px}$ (37% of vertical height), whereas training data (KHATT) occupies $\sim 59\text{ px}$ (92% of height).
+- **Provisional Preprocessing Policy**:
+  1. **Tightened Band Framing**: Align capture guidelines such that the writer's median ink extent occupies $70\%–80\%$ of vertical crop height.
+  2. **Baseline-Centric Magnification**: Apply $1.3\times$ magnification centered on the estimated writing baseline ($Y_{\text{base}}$), clamped to prevent ascender/descender clipping.
+  3. **Post-Zoom Constant Stroke Rendering**: Render strokes with uniform width locked to $2.0\text{ px}$ in the target $64\text{ px}$ coordinate space.
+  *(Status: PROVISIONAL — to be frozen after few-shot writer adaptation in Step 3).*
