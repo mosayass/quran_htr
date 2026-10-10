@@ -421,10 +421,142 @@ class LineImageDataset(Dataset):
         img_path, text = self.rows[idx]
         img = Image.open(img_path)
         image_tensor = _resize_pad(img, augment=self.augment)
-        text = text[: self.max_target_len]
         label_text = text[::-1] if self.label_order == "visual" else text
         target = torch.tensor(self.vocab.encode(label_text), dtype=torch.long)
         return Sample(image=image_tensor, target=target, text=text)
+
+
+class StrokeDataset(Dataset):
+    """
+    On-the-fly rendering dataset from raw tablet stroke vectors (strokes.json).
+    Reads strokes.json and manifest.csv (with writer_id and split).
+    Renders each stroke sequence on-the-fly:
+    - Train (augment=True): random zoom in [1.0, 1.8], stroke width after zoom in [1.4, 2.6] px,
+      rotation in [-3, 3] deg, shear in [-0.15, 0.15], baseline wobble, and point jitter.
+    - Val / Eval (augment=False): fixed zoom 1.4x, stroke width 1.8 px, no wobble/jitter.
+    """
+    def __init__(
+        self,
+        strokes_path_or_dir: Union[str, Path],
+        manifest_path: Optional[Union[str, Path]] = None,
+        vocab: Optional[Vocabulary] = None,
+        split: Optional[str] = None,
+        augment: bool = True,
+        label_order: str = "visual",
+        zoom_range: Tuple[float, float] = (1.0, 1.8),
+        width_range: Tuple[float, float] = (1.4, 2.6),
+        seed: Optional[int] = None,
+    ):
+        import json
+        try:
+            from scripts.render_strokes import render_strokes
+        except ImportError:
+            try:
+                from render_strokes import render_strokes
+            except ImportError:
+                import sys
+                from pathlib import Path
+                root = Path(__file__).resolve().parent
+                sys.path.insert(0, str(root / "scripts"))
+                from render_strokes import render_strokes
+
+        self.render_fn = render_strokes
+        self.vocab = vocab
+        self.split = split.lower() if split else None
+        self.augment = augment
+        self.label_order = label_order
+        self.zoom_range = zoom_range
+        self.width_range = width_range
+        self.seed = seed
+
+        p = Path(strokes_path_or_dir)
+        if p.is_dir():
+            strokes_file = p / "strokes.json"
+            manifest_file = Path(manifest_path) if manifest_path else (p / "manifest.csv")
+        else:
+            strokes_file = p
+            manifest_file = Path(manifest_path) if manifest_path else (p.parent / "manifest.csv")
+
+        if not strokes_file.exists():
+            raise FileNotFoundError(f"Missing strokes file: {strokes_file}")
+
+        with open(strokes_file, "r", encoding="utf-8") as f:
+            raw_strokes = json.load(f)
+
+        # Deduplicate strokes by id (keeping last saved entry)
+        strokes_by_id = {}
+        for item in raw_strokes:
+            if isinstance(item, dict) and "id" in item:
+                strokes_by_id[item["id"]] = item
+
+        self.samples: List[Tuple[str, list, str, str]] = []
+        if manifest_file.exists():
+            with open(manifest_file, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    sid = row.get("sample_id", "")
+                    if sid not in strokes_by_id:
+                        continue
+                    row_split = row.get("split", "").strip().lower()
+                    if self.split and row_split and row_split != self.split:
+                        continue
+                    text = row.get("transcription", "")
+                    wid = row.get("writer_id", "writer_01").strip() or "writer_01"
+                    if self.vocab:
+                        try:
+                            self.vocab.encode(text)
+                        except KeyError:
+                            continue
+                    self.samples.append((sid, strokes_by_id[sid]["strokes"], text, wid))
+        else:
+            for sid, item in strokes_by_id.items():
+                text = item.get("text", "")
+                if self.vocab:
+                    try:
+                        self.vocab.encode(text)
+                    except KeyError:
+                        continue
+                self.samples.append((sid, item["strokes"], text, "writer_01"))
+
+        print(f"[StrokeDataset] Loaded {len(self.samples)} stroke samples (split={self.split}, augment={self.augment}).")
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int) -> Sample:
+        import random
+        sid, strokes, text, wid = self.samples[idx]
+
+        if self.augment:
+            zoom = random.uniform(self.zoom_range[0], self.zoom_range[1])
+            width = random.uniform(self.width_range[0], self.width_range[1])
+            rot = random.uniform(-3.0, 3.0)
+            shear = random.uniform(-0.15, 0.15)
+            wobble = random.uniform(0.0, 1.2)
+            jitter = random.uniform(0.0, 0.4)
+            img = self.render_fn(
+                strokes,
+                zoom=zoom,
+                width_after_zoom=width,
+                rotation_deg=rot,
+                shear_x=shear,
+                wobble_amp=wobble,
+                jitter_sigma=jitter,
+            )
+        else:
+            img = self.render_fn(strokes, zoom=1.4, width_after_zoom=1.8)
+
+        w, h = img.size
+        tensor = TF.to_tensor(img)
+        tensor = (tensor - 0.5) / 0.5
+
+        pad_w = (-w) % WIDTH_MULTIPLE
+        if pad_w:
+            tensor = torch.nn.functional.pad(tensor, (0, pad_w), value=1.0)
+
+        label_text = text[::-1] if self.label_order == "visual" else text
+        target = torch.tensor(self.vocab.encode(label_text), dtype=torch.long) if self.vocab else torch.empty(0, dtype=torch.long)
+        return Sample(image=tensor, target=target, text=text)
 
 
 def collate_fn(batch: List[Sample]):

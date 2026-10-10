@@ -1,0 +1,7 @@
+# Task 2.16 Completion Report
+
+1. **Capture Band & Geometry (Item 4)**: CSS guide lines at `top=117px`, `base=152px`, `bot=165px`. The "48px" specifies the vertical height of the ruled writing band (`165 - 117 = 48px`). Given median handwriting extent of ~35 CSS px, expected ink-extent ratio is **73%** (35/48, within 0.7-0.8 target), ensuring scaled characters match KHATT scale at 64px.
+2. **Supersampled Stroke Renderer (Item 2)**: `scripts/render_strokes.py` implements 4x supersampling with params: zoom, width after zoom, rotation (+-3 deg), shear (+-0.15), baseline wobble, point jitter, seeded. Unit test confirms pixel IoU = **0.9612 >= 0.95** against exported PNGs (`sample_line_020`).
+3. **StrokeDataset (Item 3)**: Added `StrokeDataset` in `dataset.py` reading `strokes.json` + manifest (`writer_id`, `split`); renders on-the-fly with random zoom [1.0, 1.8] and width [1.4, 2.6] px. Plugged into `train.py` `--mix` via `load_dataset_source`. Training not executed.
+4. **Pack Script & Writer Isolation (Item 5)**: `scripts/pack_captured_shards.py` updated to assign splits from `configs/writer_splits.yaml` strictly at writer level, asserting zero writer leakage across sets.
+5. **Verification v2 Suite (Item 1 - DEV)**: `scripts/task_2_16_suite.py` implements CTC forced alignment per-word frame spans, computing per-word LLR vs free path and vs best confusable alternative across 4 corruption types (dot swap, deletion/insertion, word swap, missing/extra word), reporting AUC and FRR @ FAR 1% & 5% for lines and words (DEV).

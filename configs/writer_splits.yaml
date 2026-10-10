@@ -1,0 +1,7 @@
+# Writer-level split assignment configuration for captured tablet data
+# Crucial requirement: splits are assigned strictly at the writer level, NEVER per sample.
+
+writers:
+  writer_01: dev
+  writer_02: test
+  writer_03: test

@@ -46,12 +46,16 @@ def load_dataset_source(
     augment: bool = False,
     label_order: str = "logical",
 ) -> Dataset:
-    """Loads either a ShardDataset (if path is a .pt file, glob pattern, or directory with .pt files) or LineImageDataset."""
+    """Loads either a ShardDataset, StrokeDataset (from strokes.json), or LineImageDataset."""
     import glob
+    p = Path(path_str)
+    # 1. StrokeDataset from raw strokes.json or directory containing strokes.json
+    if p.name == "strokes.json" or (p.is_dir() and (p / "strokes.json").exists()):
+        from dataset import StrokeDataset
+        return StrokeDataset(p, vocab=vocab, augment=augment, label_order=label_order)
     matched = sorted(glob.glob(path_str))
     if matched and all(Path(m).suffix.lower() == ".pt" for m in matched):
         return ShardDataset([Path(m) for m in matched], vocab, augment=augment, label_order=label_order)
-    p = Path(path_str)
     if p.suffix.lower() == ".pt" or (p.is_dir() and any(p.glob("*.pt"))):
         return ShardDataset(p, vocab, augment=augment, label_order=label_order)
     return LineImageDataset(path_str, vocab, augment=augment, label_order=label_order)
