@@ -30,6 +30,7 @@ data/
 !data/capture/*
 !data/capture/manifest.csv
 !data/capture/*.png
+!data/capture/strokes.json
 manifests/
 tiny_khatt/
 test_ckpt/
