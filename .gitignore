@@ -26,6 +26,10 @@ data/
 !data/tanzil/quran-simple.txt
 !data/tanzil/quran-simple-clean.txt
 !data/tanzil/quran-uthmani.txt
+!data/capture/
+!data/capture/*
+!data/capture/manifest.csv
+!data/capture/*.png
 manifests/
 tiny_khatt/
 test_ckpt/

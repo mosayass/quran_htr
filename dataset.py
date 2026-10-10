@@ -391,9 +391,19 @@ class LineImageDataset(Dataset):
         self.label_order = label_order
         self.rows: List[Tuple[str, str]] = []
         skipped = 0
+        manifest_p = Path(manifest_csv)
+        manifest_dir = manifest_p.parent
         with open(manifest_csv, newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
-                img_path, text = row["image_path"], row["transcription"]
+                img_path = row.get("image_path") or row.get("image_file")
+                text = row.get("transcription", "")
+                if not img_path:
+                    continue
+                img_file_p = Path(img_path)
+                if not img_file_p.is_absolute() and not img_file_p.exists():
+                    candidate = manifest_dir / img_file_p
+                    if candidate.exists():
+                        img_path = str(candidate)
                 if filter_oov:
                     try:
                         self.vocab.encode(text[: self.max_target_len])
