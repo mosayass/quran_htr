@@ -1,28 +1,28 @@
 """
 scripts/build_capture_prompts.py
-Task 2.12 Step 3:
-Builds curated capture prompts exclusively from test surahs (data/derived/splits.json):
-- 40 line prompts (3-9 words, >=5 containing "الله")
-- 60 word prompts (balanced mixture of frequent and rare words)
-
-Vowelled text variant used: quran-simple.txt (Tanzil Simple).
-Rasm text variant used: quran-simple-clean.txt (Tanzil Simple Clean).
-Both variants have verified 100% word-count alignment across all 6,236 Ayahs.
+Task 2.17 Item 3:
+Builds paired capture prompts exclusively from test surahs (data/derived/splits.json):
+- 20 lines (4-7 words, test surahs, >=5 containing "الله")
+- Each line's words as separate paired prompts (enables line vs isolated word comparison)
+- 20 extra words (balanced frequent and rare words)
+- Vowelled and rasm mixed
 
 Outputs:
 - data/capture_prompts.json
 """
 
 from __future__ import annotations
+import sys
 import json
 import random
-import re
-import sys
-from collections import Counter
 from pathlib import Path
+from collections import Counter
 
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 ROOT = Path(__file__).resolve().parent.parent
 SPLITS_PATH = ROOT / "data" / "derived" / "splits.json"
@@ -31,32 +31,12 @@ CLEAN_NUMBERED_PATH = ROOT / "data" / "tanzil" / "quran-simple-clean-numbered.tx
 OUT_JSON = ROOT / "data" / "capture_prompts.json"
 
 SURAH_NAMES = {
-    1: "الفاتحة",
-    11: "هود",
-    25: "الفرقان",
-    32: "السجدة",
-    41: "فصلت",
-    43: "الزخرف",
-    44: "الدخان",
-    52: "الطور",
-    53: "النجم",
-    62: "الجمعة",
-    64: "التغابن",
-    68: "القلم",
-    71: "نوح",
-    76: "الإنسان",
-    78: "النبأ",
-    84: "الانشقاق",
-    89: "الفجر",
-    90: "البلد",
-    92: "الليل",
-    96: "العلق",
-    100: "العاديات",
-    101: "القارعة",
-    103: "العصر",
-    107: "الماعون",
-    111: "المسد",
-    112: "الإخلاص",
+    1: "الفاتحة", 11: "هود", 25: "الفرقان", 32: "السجدة", 41: "فصلت",
+    43: "الزخرف", 44: "الدخان", 52: "الطور", 53: "النجم", 62: "الجمعة",
+    64: "التغابن", 68: "القلم", 71: "نوح", 76: "الإنسان", 78: "النبأ",
+    84: "الانشقاق", 89: "الفجر", 90: "البلد", 92: "الليل", 96: "العلق",
+    100: "العاديات", 101: "القارعة", 103: "العصر", 107: "الماعون",
+    111: "المسد", 112: "الإخلاص",
 }
 
 
@@ -69,165 +49,154 @@ def load_test_ayahs(test_surahs: set[int]):
         c_parts = c_l.split("|")
         if len(c_parts) != 3:
             continue
-        s_id = int(c_parts[0])
-        a_id = int(c_parts[1])
-        c_text = c_parts[2].strip()
+        s_id, a_id, c_text = int(c_parts[0]), int(c_parts[1]), c_parts[2].strip()
         s_text = s_l.strip()
         if s_id in test_surahs:
-            s_words = s_text.split()
-            c_words = c_text.split()
-            assert len(s_words) == len(c_words), f"Mismatch at {s_id}:{a_id}"
-            ayahs.append({
-                "surah_id": s_id,
-                "ayah_id": a_id,
-                "surah_name": f"سورة {SURAH_NAMES.get(s_id, str(s_id))}",
-                "simple_words": s_words,
-                "clean_words": c_words,
-            })
+            sw = s_text.split()
+            cw = c_text.split()
+            if len(sw) == len(cw):
+                ayahs.append({
+                    "surah_id": s_id,
+                    "ayah_id": a_id,
+                    "surah_name": f"سورة {SURAH_NAMES.get(s_id, str(s_id))}",
+                    "sw": sw,
+                    "cw": cw,
+                })
     return ayahs
 
 
-def build_line_prompts(ayahs: list[dict], rng: random.Random) -> list[dict]:
-    # Extract candidate 3-9 word windows from ayahs
-    candidates = []
+def build_prompts():
+    splits = json.loads(SPLITS_PATH.read_text(encoding="utf-8"))
+    test_surahs = set(splits["test"]["surahs"])
+    ayahs = load_test_ayahs(test_surahs)
+
+    rng = random.Random(42)
+
+    # 1. 20 Lines (4-7 words, >= 5 containing "الله")
+    cand_lines = []
     for a in ayahs:
-        sw = a["simple_words"]
-        cw = a["clean_words"]
-        n_w = len(sw)
-        if n_w < 3:
-            continue
-        # Extract full ayah if 3..9 words, or sub-windows
-        if 3 <= n_w <= 9:
-            candidates.append({
+        nw = len(a["cw"])
+        if 4 <= nw <= 7:
+            cand_lines.append({
                 "surah_id": a["surah_id"],
                 "ayah_id": a["ayah_id"],
                 "surah_name": a["surah_name"],
-                "rasm": " ".join(cw),
-                "vowelled": " ".join(sw),
-                "words_count": n_w,
+                "words_cw": a["cw"],
+                "words_sw": a["sw"],
             })
-        else:
-            # sliding non-overlapping or stepped windows
-            step = 5
-            for start in range(0, n_w - 3, step):
-                w_len = rng.randint(3, min(9, n_w - start))
-                v_slice = sw[start : start + w_len]
-                r_slice = cw[start : start + w_len]
-                candidates.append({
+        elif nw > 7:
+            for st in range(0, nw - 4, 3):
+                ln = rng.randint(4, min(7, nw - st))
+                cand_lines.append({
                     "surah_id": a["surah_id"],
                     "ayah_id": a["ayah_id"],
                     "surah_name": a["surah_name"],
-                    "rasm": " ".join(r_slice),
-                    "vowelled": " ".join(v_slice),
-                    "words_count": len(r_slice),
+                    "words_cw": a["cw"][st : st + ln],
+                    "words_sw": a["sw"][st : st + ln],
                 })
 
-    rng.shuffle(candidates)
+    rng.shuffle(cand_lines)
+    with_allah = [l for l in cand_lines if "الله" in " ".join(l["words_cw"])]
+    without_allah = [l for l in cand_lines if "الله" not in " ".join(l["words_cw"])]
 
-    # Separate into candidates containing "الله" and others
-    with_allah = [c for c in candidates if "الله" in c["rasm"]]
-    without_allah = [c for c in candidates if "الله" not in c["rasm"]]
+    # 6 lines with "الله" (>= 5 guaranteed) + 14 without
+    selected_raw_lines = with_allah[:6] + without_allah[:14]
+    rng.shuffle(selected_raw_lines)
 
-    selected = []
-    # Pick 8 containing "الله" (>= 5 guaranteed)
-    for c in with_allah[:8]:
-        selected.append(c)
+    lines_prompts = []
+    paired_word_prompts = []
 
-    # Pick 32 remaining from without_allah
-    for c in without_allah[:32]:
-        selected.append(c)
+    for idx, l in enumerate(selected_raw_lines, 1):
+        line_id = f"line_{idx:02d}"
+        rasm_line = " ".join(l["words_cw"])
+        vow_line = " ".join(l["words_sw"])
+        prompt_type = "vowelled" if (idx % 2 == 1) else "rasm"
 
-    rng.shuffle(selected)
-    for idx, p in enumerate(selected, 1):
-        p["id"] = f"line_{idx:02d}"
+        lines_prompts.append({
+            "id": line_id,
+            "mode": "line",
+            "rasm": rasm_line,
+            "vowelled": vow_line,
+            "prompt_type": prompt_type,
+            "surah": l["surah_name"],
+            "words_count": len(l["words_cw"]),
+        })
 
-    return selected
+        # Generate each line's words as separate prompts
+        for w_idx, (cw, sw) in enumerate(zip(l["words_cw"], l["words_sw"])):
+            paired_id = f"paired_{line_id}_w{w_idx+1:02d}"
+            w_prompt_type = "vowelled" if ((idx + w_idx) % 2 == 1) else "rasm"
+            paired_word_prompts.append({
+                "id": paired_id,
+                "mode": "word",
+                "parent_line_id": line_id,
+                "word_index_in_line": w_idx,
+                "rasm": cw,
+                "vowelled": sw,
+                "prompt_type": w_prompt_type,
+                "surah": l["surah_name"],
+            })
 
-
-def build_word_prompts(ayahs: list[dict], rng: random.Random) -> list[dict]:
-    # Vocabulary counts
+    # 2. 20 Extra words (from test surahs: 10 frequent, 10 rare)
     word_freq = Counter()
-    word_map = {}  # clean_word -> (simple_word, surah_id, surah_name)
-
+    word_map = {}
     for a in ayahs:
-        for sw, cw in zip(a["simple_words"], a["clean_words"]):
+        for sw, cw in zip(a["sw"], a["cw"]):
             word_freq[cw] += 1
             if cw not in word_map:
-                word_map[cw] = (sw, a["surah_id"], a["surah_name"])
+                word_map[cw] = (sw, a["surah_name"])
 
-    # 30 Frequent words (freq >= 8)
-    frequent_candidates = [w for w, cnt in word_freq.most_common(100) if len(w) > 2]
-    rng.shuffle(frequent_candidates)
-    sel_frequent = frequent_candidates[:30]
+    frequent_cand = [w for w, cnt in word_freq.most_common(100) if len(w) >= 3 and w not in [p["rasm"] for p in paired_word_prompts]]
+    rare_cand = [w for w, cnt in word_freq.items() if cnt in (1, 2) and len(w) >= 3 and w not in [p["rasm"] for p in paired_word_prompts]]
+    rng.shuffle(frequent_cand)
+    rng.shuffle(rare_cand)
 
-    # 30 Rare words (freq == 1 or 2)
-    rare_candidates = [w for w, cnt in word_freq.items() if cnt in (1, 2) and len(w) >= 3]
-    rng.shuffle(rare_candidates)
-    sel_rare = rare_candidates[:30]
-
-    words_list = []
-    for w in sel_frequent:
-        sw, s_id, s_name = word_map[w]
-        words_list.append({
-            "rasm": w,
-            "vowelled": sw,
-            "surah_id": s_id,
-            "surah_name": s_name,
+    extra_word_prompts = []
+    for idx, w in enumerate(frequent_cand[:10], 1):
+        sw, s_name = word_map[w]
+        ptype = "vowelled" if (idx % 2 == 1) else "rasm"
+        extra_word_prompts.append({
+            "id": f"extra_word_freq_{idx:02d}",
+            "mode": "word",
             "category": "frequent",
-            "freq_in_test": word_freq[w],
-        })
-
-    for w in sel_rare:
-        sw, s_id, s_name = word_map[w]
-        words_list.append({
             "rasm": w,
             "vowelled": sw,
-            "surah_id": s_id,
-            "surah_name": s_name,
-            "category": "rare",
-            "freq_in_test": word_freq[w],
+            "prompt_type": ptype,
+            "surah": s_name,
         })
 
-    rng.shuffle(words_list)
-    for idx, p in enumerate(words_list, 1):
-        p["id"] = f"word_{idx:02d}"
+    for idx, w in enumerate(rare_cand[:10], 1):
+        sw, s_name = word_map[w]
+        ptype = "vowelled" if (idx % 2 == 0) else "rasm"
+        extra_word_prompts.append({
+            "id": f"extra_word_rare_{idx:02d}",
+            "mode": "word",
+            "category": "rare",
+            "rasm": w,
+            "vowelled": sw,
+            "prompt_type": ptype,
+            "surah": s_name,
+        })
 
-    return words_list
-
-
-def main():
-    splits = json.loads(SPLITS_PATH.read_text(encoding="utf-8"))
-    test_surahs = set(splits["test"]["surahs"])
-    print(f"Loaded {len(test_surahs)} test surahs from {SPLITS_PATH.name}.")
-
-    ayahs = load_test_ayahs(test_surahs)
-    print(f"Loaded {len(ayahs)} ayahs from test surahs.")
-
-    rng = random.Random(42)
-    line_prompts = build_line_prompts(ayahs, rng)
-    word_prompts = build_word_prompts(ayahs, rng)
-
-    allah_count = sum(1 for l in line_prompts if "الله" in l["rasm"])
-    print(f"Generated {len(line_prompts)} line prompts (contains 'الله': {allah_count} >= 5).")
-    print(f"Generated {len(word_prompts)} word prompts (30 frequent, 30 rare).")
+    all_word_prompts = paired_word_prompts + extra_word_prompts
 
     out_data = {
         "metadata": {
-            "source_vowelled": "data/tanzil/quran-simple.txt",
-            "source_rasm": "data/tanzil/quran-simple-clean.txt",
-            "test_surahs": sorted(list(test_surahs)),
-            "line_prompts_count": len(line_prompts),
-            "word_prompts_count": len(word_prompts),
-            "allah_in_lines": allah_count,
+            "version": "2.0_paired",
+            "lines_count": len(lines_prompts),
+            "paired_words_count": len(paired_word_prompts),
+            "extra_words_count": len(extra_word_prompts),
+            "total_words_count": len(all_word_prompts),
+            "allah_lines_count": sum(1 for l in lines_prompts if "الله" in l["rasm"]),
         },
-        "lines": line_prompts,
-        "words": word_prompts,
+        "lines": lines_prompts,
+        "words": all_word_prompts,
     }
 
-    OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUT_JSON.write_text(json.dumps(out_data, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Successfully saved capture prompts to {OUT_JSON}.")
+    print(f"Saved {len(lines_prompts)} lines and {len(all_word_prompts)} words to {OUT_JSON}.")
+    print(f"Lines containing 'الله': {out_data['metadata']['allah_lines_count']}")
 
 
 if __name__ == "__main__":
-    main()
+    build_prompts()

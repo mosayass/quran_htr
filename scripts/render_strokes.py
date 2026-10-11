@@ -43,12 +43,15 @@ def render_strokes(
     jitter_sigma: float = 0.0,
     target_height: int = TARGET_HEIGHT,
     center_y: float = GUIDE_BASE_Y,
+    band_top_y: float = GUIDE_TOP_Y,
+    band_height: float = BAND_HEIGHT,
     antialiasing_factor: int = 4,
     pad_x: float = 16.0,
     seed: Optional[int] = None,
 ) -> Image.Image:
     """
     Renders stroke sequences into a 64px-height PIL Image using 4x supersampling.
+    Supports both legacy absolute canvas coordinates and v2 band-relative coordinates.
     """
     if seed is not None:
         rng = np.random.default_rng(seed)
@@ -81,8 +84,8 @@ def render_strokes(
     min_x, max_x = min(xs), max(xs)
 
     # 2. Geometry & Crop bounds centered at center_y (baseline)
-    window_h = BAND_HEIGHT / max(0.1, zoom)
-    base_ratio = (center_y - GUIDE_TOP_Y) / BAND_HEIGHT
+    window_h = band_height / max(0.1, zoom)
+    base_ratio = (center_y - band_top_y) / band_height
     crop_y1 = center_y - base_ratio * window_h
     crop_x1 = max(0.0, min_x - pad_x)
     crop_x2 = max_x + pad_x

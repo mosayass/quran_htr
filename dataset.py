@@ -489,7 +489,7 @@ class StrokeDataset(Dataset):
             if isinstance(item, dict) and "id" in item:
                 strokes_by_id[item["id"]] = item
 
-        self.samples: List[Tuple[str, list, str, str]] = []
+        self.samples: List[Tuple[str, list, str, str, Optional[dict]]] = []
         if manifest_file.exists():
             with open(manifest_file, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
@@ -502,12 +502,13 @@ class StrokeDataset(Dataset):
                         continue
                     text = row.get("transcription", "")
                     wid = row.get("writer_id", "writer_01").strip() or "writer_01"
+                    geom = strokes_by_id[sid].get("geometry")
                     if self.vocab:
                         try:
                             self.vocab.encode(text)
                         except KeyError:
                             continue
-                    self.samples.append((sid, strokes_by_id[sid]["strokes"], text, wid))
+                    self.samples.append((sid, strokes_by_id[sid]["strokes"], text, wid, geom))
         else:
             for sid, item in strokes_by_id.items():
                 text = item.get("text", "")
@@ -516,7 +517,7 @@ class StrokeDataset(Dataset):
                         self.vocab.encode(text)
                     except KeyError:
                         continue
-                self.samples.append((sid, item["strokes"], text, "writer_01"))
+                self.samples.append((sid, item["strokes"], text, "writer_01", item.get("geometry")))
 
         print(f"[StrokeDataset] Loaded {len(self.samples)} stroke samples (split={self.split}, augment={self.augment}).")
 
@@ -525,7 +526,23 @@ class StrokeDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Sample:
         import random
-        sid, strokes, text, wid = self.samples[idx]
+        sid, strokes, text, wid, geom = self.samples[idx]
+
+        # Geometry resolution
+        if geom:
+            band_top = float(geom.get("band_top_css", 0.0))
+            band_base = float(geom.get("band_base_css", 147.0))
+            band_bot = float(geom.get("band_bot_css", 180.0))
+            band_h = float(geom.get("band_height_css", band_bot - band_top))
+            # Strokes stored band-relative: y=0 is band top
+            render_band_top = 0.0
+            render_center_y = band_base - band_top
+            render_band_h = band_h
+        else:
+            # Legacy v1 capture geometry
+            render_band_top = 50.0
+            render_center_y = 160.0
+            render_band_h = 150.0
 
         if self.augment:
             zoom = random.uniform(self.zoom_range[0], self.zoom_range[1])
@@ -542,9 +559,19 @@ class StrokeDataset(Dataset):
                 shear_x=shear,
                 wobble_amp=wobble,
                 jitter_sigma=jitter,
+                center_y=render_center_y,
+                band_top_y=render_band_top,
+                band_height=render_band_h,
             )
         else:
-            img = self.render_fn(strokes, zoom=1.4, width_after_zoom=1.8)
+            img = self.render_fn(
+                strokes,
+                zoom=1.4,
+                width_after_zoom=1.8,
+                center_y=render_center_y,
+                band_top_y=render_band_top,
+                band_height=render_band_h,
+            )
 
         w, h = img.size
         tensor = TF.to_tensor(img)

@@ -241,509 +241,1024 @@
   <script>
     // Prompt sets with both rasm-only and fully vowelled text
     const PROMPTS_LINE = [
-      {
-            "rasm": "يوم يكون الناس كالفراش المبثوث",
-            "vowelled": "يَوْمَ يَكُونُ النَّاسُ كَالْفَرَاشِ الْمَبْثُوثِ",
-            "surah": "سورة القارعة"
-      },
-      {
-            "rasm": "بل كذبوا بالساعة وأعتدنا لمن كذب بالساعة سعيرا",
-            "vowelled": "بَلْ كَذَّبُوا بِالسَّاعَةِ وَأَعْتَدْنَا لِمَن كَذَّبَ بِالسَّاعَةِ سَعِيرًا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "الله لا إله إلا هو وعلى الله فليتوكل المؤمنون",
-            "vowelled": "اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ وَعَلَى اللَّهِ فَلْيَتَوَكَّلِ الْمُؤْمِنُونَ",
-            "surah": "سورة التغابن"
-      },
-      {
-            "rasm": "سواء عليكم إنما تجزون",
-            "vowelled": "سَوَاءٌ عَلَيْكُمْ إِنَّمَا تُجْزَوْنَ",
-            "surah": "سورة الطور"
-      },
-      {
-            "rasm": "وإذا قيل لهم",
-            "vowelled": "وَإِذَا قِيلَ لَهُمُ",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "أنزلنا والله بما تعملون خبير",
-            "vowelled": "أَنزَلْنَا وَاللَّهُ بِمَا تَعْمَلُونَ خَبِيرٌ",
-            "surah": "سورة التغابن"
-      },
-      {
-            "rasm": "إنا بلوناهم كما بلونا أصحاب",
-            "vowelled": "إِنَّا بَلَوْنَاهُمْ كَمَا بَلَوْنَا أَصْحَابَ",
-            "surah": "سورة القلم"
-      },
-      {
-            "rasm": "أنفسهم حتى يتبين",
-            "vowelled": "أَنفُسِهِمْ حَتَّىٰ يَتَبَيَّنَ",
-            "surah": "سورة فصلت"
-      },
-      {
-            "rasm": "وجعلنا نومكم سباتا",
-            "vowelled": "وَجَعَلْنَا نَوْمَكُمْ سُبَاتًا",
-            "surah": "سورة النبأ"
-      },
-      {
-            "rasm": "يوم يدعون إلى نار جهنم دعا",
-            "vowelled": "يَوْمَ يُدَعُّونَ إِلَىٰ نَارِ جَهَنَّمَ دَعًّا",
-            "surah": "سورة الطور"
-      },
-      {
-            "rasm": "قالوا أنطقنا الله الذي أنطق",
-            "vowelled": "قَالُوا أَنطَقَنَا اللَّهُ الَّذِي أَنطَقَ",
-            "surah": "سورة فصلت"
-      },
-      {
-            "rasm": "لقد خلقنا الإنسان في كبد",
-            "vowelled": "لَقَدْ خَلَقْنَا الْإِنسَانَ فِي كَبَدٍ",
-            "surah": "سورة البلد"
-      },
-      {
-            "rasm": "ويوم يحشرهم وما يعبدون من دون الله",
-            "vowelled": "وَيَوْمَ يَحْشُرُهُمْ وَمَا يَعْبُدُونَ مِن دُونِ اللَّهِ",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "ولقد آتينا موسى الكتاب وجعلنا معه أخاه هارون وزيرا",
-            "vowelled": "وَلَقَدْ آتَيْنَا مُوسَى الْكِتَابَ وَجَعَلْنَا مَعَهُ أَخَاهُ هَارُونَ وَزِيرًا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "تبارك الذي جعل في السماء بروجا",
-            "vowelled": "تَبَارَكَ الَّذِي جَعَلَ فِي السَّمَاءِ بُرُوجًا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "ما أصاب من مصيبة إلا بإذن الله ومن يؤمن",
-            "vowelled": "مَا أَصَابَ مِن مُّصِيبَةٍ إِلَّا بِإِذْنِ اللَّهِ وَمَن يُؤْمِن",
-            "surah": "سورة التغابن"
-      },
-      {
-            "rasm": "يوم لا يغني عنهم كيدهم شيئا ولا هم ينصرون",
-            "vowelled": "يَوْمَ لَا يُغْنِي عَنْهُمْ كَيْدُهُمْ شَيْئًا وَلَا هُمْ يُنصَرُونَ",
-            "surah": "سورة الطور"
-      },
-      {
-            "rasm": "عندها جنة المأوى",
-            "vowelled": "عِندَهَا جَنَّةُ الْمَأْوَىٰ",
-            "surah": "سورة النجم"
-      },
-      {
-            "rasm": "ولا شفيع أفلا تتذكرون",
-            "vowelled": "وَلَا شَفِيعٍ أَفَلَا تَتَذَكَّرُونَ",
-            "surah": "سورة السجدة"
-      },
-      {
-            "rasm": "لا يعلم كثيرا مما",
-            "vowelled": "لَا يَعْلَمُ كَثِيرًا مِّمَّا",
-            "surah": "سورة فصلت"
-      },
-      {
-            "rasm": "نحن أولياؤكم في الحياة الدنيا",
-            "vowelled": "نَحْنُ أَوْلِيَاؤُكُمْ فِي الْحَيَاةِ الدُّنْيَا",
-            "surah": "سورة فصلت"
-      },
-      {
-            "rasm": "إن المتقين في مقام أمين",
-            "vowelled": "إِنَّ الْمُتَّقِينَ فِي مَقَامٍ أَمِينٍ",
-            "surah": "سورة الدخان"
-      },
-      {
-            "rasm": "هم بلقاء ربهم كافرون",
-            "vowelled": "هُم بِلِقَاءِ رَبِّهِمْ كَافِرُونَ",
-            "surah": "سورة السجدة"
-      },
-      {
-            "rasm": "إنما نطعمكم لوجه الله لا",
-            "vowelled": "إِنَّمَا نُطْعِمُكُمْ لِوَجْهِ اللَّهِ لَا",
-            "surah": "سورة الإنسان"
-      },
-      {
-            "rasm": "الحمد لله رب العالمين",
-            "vowelled": "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ",
-            "surah": "سورة الفاتحة"
-      },
-      {
-            "rasm": "ويا قوم هذه ناقة",
-            "vowelled": "وَيَا قَوْمِ هَٰذِهِ نَاقَةُ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "إن ربي على كل",
-            "vowelled": "إِنَّ رَبِّي عَلَىٰ كُلِّ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "إله إلا هو فهل أنتم",
-            "vowelled": "إِلَٰهَ إِلَّا هُوَ فَهَلْ أَنتُم",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "قالوا يا نوح قد",
-            "vowelled": "قَالُوا يَا نُوحُ قَدْ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "قد خلت من قبلهم من الجن",
-            "vowelled": "قَدْ خَلَتْ مِن قَبْلِهِم مِّنَ الْجِنِّ",
-            "surah": "سورة فصلت"
-      },
-      {
-            "rasm": "الذي يؤتي ماله يتزكى",
-            "vowelled": "الَّذِي يُؤْتِي مَالَهُ يَتَزَكَّىٰ",
-            "surah": "سورة الليل"
-      },
-      {
-            "rasm": "ربنا لأنزل ملائكة",
-            "vowelled": "رَبُّنَا لَأَنزَلَ مَلَائِكَةً",
-            "surah": "سورة فصلت"
-      },
-      {
-            "rasm": "وأنه خلق الزوجين الذكر والأنثى",
-            "vowelled": "وَأَنَّهُ خَلَقَ الزَّوْجَيْنِ الذَّكَرَ وَالْأُنثَىٰ",
-            "surah": "سورة النجم"
-      },
-      {
-            "rasm": "أنزل بعلم الله وأن لا إله إلا هو فهل",
-            "vowelled": "أُنزِلَ بِعِلْمِ اللَّهِ وَأَن لَّا إِلَٰهَ إِلَّا هُوَ فَهَلْ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "بسم الله الرحمن الرحيم الم",
-            "vowelled": "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ الم",
-            "surah": "سورة السجدة"
-      },
-      {
-            "rasm": "يغشى الناس هذا عذاب أليم",
-            "vowelled": "يَغْشَى النَّاسَ هَٰذَا عَذَابٌ أَلِيمٌ",
-            "surah": "سورة الدخان"
-      },
-      {
-            "rasm": "وقال الذين لا يرجون لقاءنا لولا",
-            "vowelled": "وَقَالَ الَّذِينَ لَا يَرْجُونَ لِقَاءَنَا لَوْلَا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "أجل مسمى ويؤت كل",
-            "vowelled": "أَجَلٍ مُّسَمًّى وَيُؤْتِ كُلَّ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "ولا يملكون موتا",
-            "vowelled": "وَلَا يَمْلِكُونَ مَوْتًا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "أم عندهم خزائن ربك أم هم المصيطرون",
-            "vowelled": "أَمْ عِندَهُمْ خَزَائِنُ رَبِّكَ أَمْ هُمُ الْمُصَيْطِرُونَ",
-            "surah": "سورة الطور"
-      }
+    {
+        "id": "line_01",
+        "rasm": "وقيل يا أرض ابلعي",
+        "vowelled": "وَقِيلَ يَا أَرْضُ ابْلَعِي",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "line_02",
+        "rasm": "وسبح بحمده وكفى به بذنوب عباده",
+        "vowelled": "وَسَبِّحْ بِحَمْدِهِ وَكَفَىٰ بِهِ بِذُنُوبِ عِبَادِهِ",
+        "prompt_type": "rasm",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "line_03",
+        "rasm": "ولما ضرب ابن مريم مثلا إذا",
+        "vowelled": "وَلَمَّا ضُرِبَ ابْنُ مَرْيَمَ مَثَلًا إِذَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "line_04",
+        "rasm": "صدورهم ليستخفوا منه ألا حين",
+        "vowelled": "صُدُورَهُمْ لِيَسْتَخْفُوا مِنْهُ أَلَا حِينَ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "line_05",
+        "rasm": "واصبر فإن الله لا يضيع أجر المحسنين",
+        "vowelled": "وَاصْبِرْ فَإِنَّ اللَّهَ لَا يُضِيعُ أَجْرَ الْمُحْسِنِينَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "line_06",
+        "rasm": "الشفاعة إلا من شهد بالحق وهم",
+        "vowelled": "الشَّفَاعَةَ إِلَّا مَن شَهِدَ بِالْحَقِّ وَهُمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "line_07",
+        "rasm": "ويا قوم لا أسألكم",
+        "vowelled": "وَيَا قَوْمِ لَا أَسْأَلُكُمْ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "line_08",
+        "rasm": "الرحيم يسبح لله ما",
+        "vowelled": "الرَّحِيمِ يُسَبِّحُ لِلَّهِ مَا",
+        "prompt_type": "rasm",
+        "surah": "سورة الجمعة"
+    },
+    {
+        "id": "line_09",
+        "rasm": "وإن كلا لما ليوفينهم ربك أعمالهم إنه",
+        "vowelled": "وَإِنَّ كُلًّا لَّمَّا لَيُوَفِّيَنَّهُمْ رَبُّكَ أَعْمَالَهُمْ إِنَّهُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "line_10",
+        "rasm": "تعلنون والله عليم بذات الصدور",
+        "vowelled": "تُعْلِنُونَ وَاللَّهُ عَلِيمٌ بِذَاتِ الصُّدُورِ",
+        "prompt_type": "rasm",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "line_11",
+        "rasm": "عباد الله إني لكم رسول أمين",
+        "vowelled": "عِبَادَ اللَّهِ إِنِّي لَكُمْ رَسُولٌ أَمِينٌ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الدخان"
+    },
+    {
+        "id": "line_12",
+        "rasm": "والله أعلم بما يوعون",
+        "vowelled": "وَاللَّهُ أَعْلَمُ بِمَا يُوعُونَ",
+        "prompt_type": "rasm",
+        "surah": "سورة الانشقاق"
+    },
+    {
+        "id": "line_13",
+        "rasm": "أبصرنا وسمعنا فارجعنا نعمل صالحا إنا موقنون",
+        "vowelled": "أَبْصَرْنَا وَسَمِعْنَا فَارْجِعْنَا نَعْمَلْ صَالِحًا إِنَّا مُوقِنُونَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة السجدة"
+    },
+    {
+        "id": "line_14",
+        "rasm": "من تحتها الأنهار خالدين",
+        "vowelled": "مِن تَحْتِهَا الْأَنْهَارُ خَالِدِينَ",
+        "prompt_type": "rasm",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "line_15",
+        "rasm": "العلم إن ربك هو أعلم بمن",
+        "vowelled": "الْعِلْمِ إِنَّ رَبَّكَ هُوَ أَعْلَمُ بِمَن",
+        "prompt_type": "vowelled",
+        "surah": "سورة النجم"
+    },
+    {
+        "id": "line_16",
+        "rasm": "إليك إنك على صراط مستقيم",
+        "vowelled": "إِلَيْكَ إِنَّكَ عَلَىٰ صِرَاطٍ مُّسْتَقِيمٍ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "line_17",
+        "rasm": "فمن الله علينا ووقانا عذاب السموم",
+        "vowelled": "فَمَنَّ اللَّهُ عَلَيْنَا وَوَقَانَا عَذَابَ السَّمُومِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الطور"
+    },
+    {
+        "id": "line_18",
+        "rasm": "ذلك لما متاع الحياة",
+        "vowelled": "ذَٰلِكَ لَمَّا مَتَاعُ الْحَيَاةِ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "line_19",
+        "rasm": "نجينا شعيبا والذين آمنوا",
+        "vowelled": "نَجَّيْنَا شُعَيْبًا وَالَّذِينَ آمَنُوا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "line_20",
+        "rasm": "والله أنبتكم من الأرض نباتا",
+        "vowelled": "وَاللَّهُ أَنبَتَكُم مِّنَ الْأَرْضِ نَبَاتًا",
+        "prompt_type": "rasm",
+        "surah": "سورة نوح"
+    }
 ];
 
     const PROMPTS_WORD = [
-      {
-            "rasm": "بينك",
-            "vowelled": "بَيْنَكَ",
-            "surah": "سورة فصلت"
-      },
-      {
-            "rasm": "فيها",
-            "vowelled": "فِيهَا",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "والله",
-            "vowelled": "وَاللَّهُ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "أنزله",
-            "vowelled": "أَنزَلَهُ",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "يوم",
-            "vowelled": "يَوْمِ",
-            "surah": "سورة الفاتحة"
-      },
-      {
-            "rasm": "دون",
-            "vowelled": "دُونِ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "وهو",
-            "vowelled": "وَهُوَ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "الله",
-            "vowelled": "اللَّهِ",
-            "surah": "سورة الفاتحة"
-      },
-      {
-            "rasm": "حفيظ",
-            "vowelled": "حَفِيظٌ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "كيدهم",
-            "vowelled": "كَيْدُهُمْ",
-            "surah": "سورة الطور"
-      },
-      {
-            "rasm": "لدن",
-            "vowelled": "لَّدُنْ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "الحطب",
-            "vowelled": "الْحَطَبِ",
-            "surah": "سورة المسد"
-      },
-      {
-            "rasm": "لحب",
-            "vowelled": "لِحُبِّ",
-            "surah": "سورة العاديات"
-      },
-      {
-            "rasm": "طباقا",
-            "vowelled": "طِبَاقًا",
-            "surah": "سورة نوح"
-      },
-      {
-            "rasm": "ليذكروا",
-            "vowelled": "لِيَذَّكَّرُوا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "يسر",
-            "vowelled": "يَسْرِ",
-            "surah": "سورة الفجر"
-      },
-      {
-            "rasm": "الرحمن",
-            "vowelled": "الرَّحْمَٰنِ",
-            "surah": "سورة الفاتحة"
-      },
-      {
-            "rasm": "ربك",
-            "vowelled": "رَّبِّكَ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "إلى",
-            "vowelled": "إِلَىٰ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "وإستبرق",
-            "vowelled": "وَإِسْتَبْرَقٍ",
-            "surah": "سورة الدخان"
-      },
-      {
-            "rasm": "هذا",
-            "vowelled": "هَٰذَا",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "وما",
-            "vowelled": "وَمَا",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "ذوقوا",
-            "vowelled": "ذُوقُوا",
-            "surah": "سورة السجدة"
-      },
-      {
-            "rasm": "دعوت",
-            "vowelled": "دَعَوْتُ",
-            "surah": "سورة نوح"
-      },
-      {
-            "rasm": "إنه",
-            "vowelled": "إِنَّهُ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "واتخذوا",
-            "vowelled": "وَاتَّخَذُوا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "تعملون",
-            "vowelled": "تَعْمَلُونَ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "وكان",
-            "vowelled": "وَكَانَ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "ألا",
-            "vowelled": "أَلَّا",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "يبعثوا",
-            "vowelled": "يُبْعَثُوا",
-            "surah": "سورة التغابن"
-      },
-      {
-            "rasm": "يأتيكم",
-            "vowelled": "يَأْتِيكُم",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "وقال",
-            "vowelled": "وَقَالَ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "ويعبدون",
-            "vowelled": "وَيَعْبُدُونَ",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "ومن",
-            "vowelled": "وَمِن",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "لما",
-            "vowelled": "لَّمَّا",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "والحكمة",
-            "vowelled": "وَالْحِكْمَةَ",
-            "surah": "سورة الجمعة"
-      },
-      {
-            "rasm": "هديناه",
-            "vowelled": "هَدَيْنَاهُ",
-            "surah": "سورة الإنسان"
-      },
-      {
-            "rasm": "ابن",
-            "vowelled": "ابْنُ",
-            "surah": "سورة الزخرف"
-      },
-      {
-            "rasm": "يحملوها",
-            "vowelled": "يَحْمِلُوهَا",
-            "surah": "سورة الجمعة"
-      },
-      {
-            "rasm": "ولقد",
-            "vowelled": "وَلَقَدْ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "وقالوا",
-            "vowelled": "وَقَالُوا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "وأخذ",
-            "vowelled": "وَأَخَذَ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "خلق",
-            "vowelled": "خَلَقَ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "وملئه",
-            "vowelled": "وَمَلَئِهِ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "نوح",
-            "vowelled": "نُوحُ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "هيه",
-            "vowelled": "هِيَهْ",
-            "surah": "سورة القارعة"
-      },
-      {
-            "rasm": "وإذا",
-            "vowelled": "وَإِذَا",
-            "surah": "سورة الفرقان"
-      },
-      {
-            "rasm": "قوم",
-            "vowelled": "قَوْمِ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "عذاب",
-            "vowelled": "عَذَابَ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "وإدبار",
-            "vowelled": "وَإِدْبَارَ",
-            "surah": "سورة الطور"
-      },
-      {
-            "rasm": "ويخافون",
-            "vowelled": "وَيَخَافُونَ",
-            "surah": "سورة الإنسان"
-      },
-      {
-            "rasm": "إني",
-            "vowelled": "إِنِّي",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "فلا",
-            "vowelled": "فَلَا",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "لنخرج",
-            "vowelled": "لِّنُخْرِجَ",
-            "surah": "سورة النبأ"
-      },
-      {
-            "rasm": "اللات",
-            "vowelled": "اللَّاتَ",
-            "surah": "سورة النجم"
-      },
-      {
-            "rasm": "قالوا",
-            "vowelled": "قَالُوا",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "علمه",
-            "vowelled": "عَلَّمَهُ",
-            "surah": "سورة النجم"
-      },
-      {
-            "rasm": "بما",
-            "vowelled": "بِمَا",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "شيء",
-            "vowelled": "شَيْءٍ",
-            "surah": "سورة هود"
-      },
-      {
-            "rasm": "يبيتون",
-            "vowelled": "يَبِيتُونَ",
-            "surah": "سورة الفرقان"
-      }
+    {
+        "id": "paired_line_01_w01",
+        "rasm": "وقيل",
+        "vowelled": "وَقِيلَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_01_w02",
+        "rasm": "يا",
+        "vowelled": "يَا",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_01_w03",
+        "rasm": "أرض",
+        "vowelled": "أَرْضُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_01_w04",
+        "rasm": "ابلعي",
+        "vowelled": "ابْلَعِي",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_02_w01",
+        "rasm": "وسبح",
+        "vowelled": "وَسَبِّحْ",
+        "prompt_type": "rasm",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "paired_line_02_w02",
+        "rasm": "بحمده",
+        "vowelled": "بِحَمْدِهِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "paired_line_02_w03",
+        "rasm": "وكفى",
+        "vowelled": "وَكَفَىٰ",
+        "prompt_type": "rasm",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "paired_line_02_w04",
+        "rasm": "به",
+        "vowelled": "بِهِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "paired_line_02_w05",
+        "rasm": "بذنوب",
+        "vowelled": "بِذُنُوبِ",
+        "prompt_type": "rasm",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "paired_line_02_w06",
+        "rasm": "عباده",
+        "vowelled": "عِبَادِهِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "paired_line_03_w01",
+        "rasm": "ولما",
+        "vowelled": "وَلَمَّا",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_03_w02",
+        "rasm": "ضرب",
+        "vowelled": "ضُرِبَ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_03_w03",
+        "rasm": "ابن",
+        "vowelled": "ابْنُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_03_w04",
+        "rasm": "مريم",
+        "vowelled": "مَرْيَمَ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_03_w05",
+        "rasm": "مثلا",
+        "vowelled": "مَثَلًا",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_03_w06",
+        "rasm": "إذا",
+        "vowelled": "إِذَا",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_04_w01",
+        "rasm": "صدورهم",
+        "vowelled": "صُدُورَهُمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_04_w02",
+        "rasm": "ليستخفوا",
+        "vowelled": "لِيَسْتَخْفُوا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_04_w03",
+        "rasm": "منه",
+        "vowelled": "مِنْهُ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_04_w04",
+        "rasm": "ألا",
+        "vowelled": "أَلَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_04_w05",
+        "rasm": "حين",
+        "vowelled": "حِينَ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_05_w01",
+        "rasm": "واصبر",
+        "vowelled": "وَاصْبِرْ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_05_w02",
+        "rasm": "فإن",
+        "vowelled": "فَإِنَّ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_05_w03",
+        "rasm": "الله",
+        "vowelled": "اللَّهَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_05_w04",
+        "rasm": "لا",
+        "vowelled": "لَا",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_05_w05",
+        "rasm": "يضيع",
+        "vowelled": "يُضِيعُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_05_w06",
+        "rasm": "أجر",
+        "vowelled": "أَجْرَ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_05_w07",
+        "rasm": "المحسنين",
+        "vowelled": "الْمُحْسِنِينَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_06_w01",
+        "rasm": "الشفاعة",
+        "vowelled": "الشَّفَاعَةَ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_06_w02",
+        "rasm": "إلا",
+        "vowelled": "إِلَّا",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_06_w03",
+        "rasm": "من",
+        "vowelled": "مَن",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_06_w04",
+        "rasm": "شهد",
+        "vowelled": "شَهِدَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_06_w05",
+        "rasm": "بالحق",
+        "vowelled": "بِالْحَقِّ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_06_w06",
+        "rasm": "وهم",
+        "vowelled": "وَهُمْ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_07_w01",
+        "rasm": "ويا",
+        "vowelled": "وَيَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_07_w02",
+        "rasm": "قوم",
+        "vowelled": "قَوْمِ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_07_w03",
+        "rasm": "لا",
+        "vowelled": "لَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_07_w04",
+        "rasm": "أسألكم",
+        "vowelled": "أَسْأَلُكُمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_08_w01",
+        "rasm": "الرحيم",
+        "vowelled": "الرَّحِيمِ",
+        "prompt_type": "rasm",
+        "surah": "سورة الجمعة"
+    },
+    {
+        "id": "paired_line_08_w02",
+        "rasm": "يسبح",
+        "vowelled": "يُسَبِّحُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الجمعة"
+    },
+    {
+        "id": "paired_line_08_w03",
+        "rasm": "لله",
+        "vowelled": "لِلَّهِ",
+        "prompt_type": "rasm",
+        "surah": "سورة الجمعة"
+    },
+    {
+        "id": "paired_line_08_w04",
+        "rasm": "ما",
+        "vowelled": "مَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة الجمعة"
+    },
+    {
+        "id": "paired_line_09_w01",
+        "rasm": "وإن",
+        "vowelled": "وَإِنَّ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_09_w02",
+        "rasm": "كلا",
+        "vowelled": "كُلًّا",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_09_w03",
+        "rasm": "لما",
+        "vowelled": "لَّمَّا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_09_w04",
+        "rasm": "ليوفينهم",
+        "vowelled": "لَيُوَفِّيَنَّهُمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_09_w05",
+        "rasm": "ربك",
+        "vowelled": "رَبُّكَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_09_w06",
+        "rasm": "أعمالهم",
+        "vowelled": "أَعْمَالَهُمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_09_w07",
+        "rasm": "إنه",
+        "vowelled": "إِنَّهُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_10_w01",
+        "rasm": "تعلنون",
+        "vowelled": "تُعْلِنُونَ",
+        "prompt_type": "rasm",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_10_w02",
+        "rasm": "والله",
+        "vowelled": "وَاللَّهُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_10_w03",
+        "rasm": "عليم",
+        "vowelled": "عَلِيمٌ",
+        "prompt_type": "rasm",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_10_w04",
+        "rasm": "بذات",
+        "vowelled": "بِذَاتِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_10_w05",
+        "rasm": "الصدور",
+        "vowelled": "الصُّدُورِ",
+        "prompt_type": "rasm",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_11_w01",
+        "rasm": "عباد",
+        "vowelled": "عِبَادَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الدخان"
+    },
+    {
+        "id": "paired_line_11_w02",
+        "rasm": "الله",
+        "vowelled": "اللَّهِ",
+        "prompt_type": "rasm",
+        "surah": "سورة الدخان"
+    },
+    {
+        "id": "paired_line_11_w03",
+        "rasm": "إني",
+        "vowelled": "إِنِّي",
+        "prompt_type": "vowelled",
+        "surah": "سورة الدخان"
+    },
+    {
+        "id": "paired_line_11_w04",
+        "rasm": "لكم",
+        "vowelled": "لَكُمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة الدخان"
+    },
+    {
+        "id": "paired_line_11_w05",
+        "rasm": "رسول",
+        "vowelled": "رَسُولٌ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الدخان"
+    },
+    {
+        "id": "paired_line_11_w06",
+        "rasm": "أمين",
+        "vowelled": "أَمِينٌ",
+        "prompt_type": "rasm",
+        "surah": "سورة الدخان"
+    },
+    {
+        "id": "paired_line_12_w01",
+        "rasm": "والله",
+        "vowelled": "وَاللَّهُ",
+        "prompt_type": "rasm",
+        "surah": "سورة الانشقاق"
+    },
+    {
+        "id": "paired_line_12_w02",
+        "rasm": "أعلم",
+        "vowelled": "أَعْلَمُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الانشقاق"
+    },
+    {
+        "id": "paired_line_12_w03",
+        "rasm": "بما",
+        "vowelled": "بِمَا",
+        "prompt_type": "rasm",
+        "surah": "سورة الانشقاق"
+    },
+    {
+        "id": "paired_line_12_w04",
+        "rasm": "يوعون",
+        "vowelled": "يُوعُونَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الانشقاق"
+    },
+    {
+        "id": "paired_line_13_w01",
+        "rasm": "أبصرنا",
+        "vowelled": "أَبْصَرْنَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة السجدة"
+    },
+    {
+        "id": "paired_line_13_w02",
+        "rasm": "وسمعنا",
+        "vowelled": "وَسَمِعْنَا",
+        "prompt_type": "rasm",
+        "surah": "سورة السجدة"
+    },
+    {
+        "id": "paired_line_13_w03",
+        "rasm": "فارجعنا",
+        "vowelled": "فَارْجِعْنَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة السجدة"
+    },
+    {
+        "id": "paired_line_13_w04",
+        "rasm": "نعمل",
+        "vowelled": "نَعْمَلْ",
+        "prompt_type": "rasm",
+        "surah": "سورة السجدة"
+    },
+    {
+        "id": "paired_line_13_w05",
+        "rasm": "صالحا",
+        "vowelled": "صَالِحًا",
+        "prompt_type": "vowelled",
+        "surah": "سورة السجدة"
+    },
+    {
+        "id": "paired_line_13_w06",
+        "rasm": "إنا",
+        "vowelled": "إِنَّا",
+        "prompt_type": "rasm",
+        "surah": "سورة السجدة"
+    },
+    {
+        "id": "paired_line_13_w07",
+        "rasm": "موقنون",
+        "vowelled": "مُوقِنُونَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة السجدة"
+    },
+    {
+        "id": "paired_line_14_w01",
+        "rasm": "من",
+        "vowelled": "مِن",
+        "prompt_type": "rasm",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_14_w02",
+        "rasm": "تحتها",
+        "vowelled": "تَحْتِهَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_14_w03",
+        "rasm": "الأنهار",
+        "vowelled": "الْأَنْهَارُ",
+        "prompt_type": "rasm",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_14_w04",
+        "rasm": "خالدين",
+        "vowelled": "خَالِدِينَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "paired_line_15_w01",
+        "rasm": "العلم",
+        "vowelled": "الْعِلْمِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة النجم"
+    },
+    {
+        "id": "paired_line_15_w02",
+        "rasm": "إن",
+        "vowelled": "إِنَّ",
+        "prompt_type": "rasm",
+        "surah": "سورة النجم"
+    },
+    {
+        "id": "paired_line_15_w03",
+        "rasm": "ربك",
+        "vowelled": "رَبَّكَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة النجم"
+    },
+    {
+        "id": "paired_line_15_w04",
+        "rasm": "هو",
+        "vowelled": "هُوَ",
+        "prompt_type": "rasm",
+        "surah": "سورة النجم"
+    },
+    {
+        "id": "paired_line_15_w05",
+        "rasm": "أعلم",
+        "vowelled": "أَعْلَمُ",
+        "prompt_type": "vowelled",
+        "surah": "سورة النجم"
+    },
+    {
+        "id": "paired_line_15_w06",
+        "rasm": "بمن",
+        "vowelled": "بِمَن",
+        "prompt_type": "rasm",
+        "surah": "سورة النجم"
+    },
+    {
+        "id": "paired_line_16_w01",
+        "rasm": "إليك",
+        "vowelled": "إِلَيْكَ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_16_w02",
+        "rasm": "إنك",
+        "vowelled": "إِنَّكَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_16_w03",
+        "rasm": "على",
+        "vowelled": "عَلَىٰ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_16_w04",
+        "rasm": "صراط",
+        "vowelled": "صِرَاطٍ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_16_w05",
+        "rasm": "مستقيم",
+        "vowelled": "مُّسْتَقِيمٍ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_17_w01",
+        "rasm": "فمن",
+        "vowelled": "فَمَنَّ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الطور"
+    },
+    {
+        "id": "paired_line_17_w02",
+        "rasm": "الله",
+        "vowelled": "اللَّهُ",
+        "prompt_type": "rasm",
+        "surah": "سورة الطور"
+    },
+    {
+        "id": "paired_line_17_w03",
+        "rasm": "علينا",
+        "vowelled": "عَلَيْنَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة الطور"
+    },
+    {
+        "id": "paired_line_17_w04",
+        "rasm": "ووقانا",
+        "vowelled": "وَوَقَانَا",
+        "prompt_type": "rasm",
+        "surah": "سورة الطور"
+    },
+    {
+        "id": "paired_line_17_w05",
+        "rasm": "عذاب",
+        "vowelled": "عَذَابَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الطور"
+    },
+    {
+        "id": "paired_line_17_w06",
+        "rasm": "السموم",
+        "vowelled": "السَّمُومِ",
+        "prompt_type": "rasm",
+        "surah": "سورة الطور"
+    },
+    {
+        "id": "paired_line_18_w01",
+        "rasm": "ذلك",
+        "vowelled": "ذَٰلِكَ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_18_w02",
+        "rasm": "لما",
+        "vowelled": "لَمَّا",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_18_w03",
+        "rasm": "متاع",
+        "vowelled": "مَتَاعُ",
+        "prompt_type": "rasm",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_18_w04",
+        "rasm": "الحياة",
+        "vowelled": "الْحَيَاةِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "paired_line_19_w01",
+        "rasm": "نجينا",
+        "vowelled": "نَجَّيْنَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_19_w02",
+        "rasm": "شعيبا",
+        "vowelled": "شُعَيْبًا",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_19_w03",
+        "rasm": "والذين",
+        "vowelled": "وَالَّذِينَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_19_w04",
+        "rasm": "آمنوا",
+        "vowelled": "آمَنُوا",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "paired_line_20_w01",
+        "rasm": "والله",
+        "vowelled": "وَاللَّهُ",
+        "prompt_type": "rasm",
+        "surah": "سورة نوح"
+    },
+    {
+        "id": "paired_line_20_w02",
+        "rasm": "أنبتكم",
+        "vowelled": "أَنبَتَكُم",
+        "prompt_type": "vowelled",
+        "surah": "سورة نوح"
+    },
+    {
+        "id": "paired_line_20_w03",
+        "rasm": "من",
+        "vowelled": "مِّنَ",
+        "prompt_type": "rasm",
+        "surah": "سورة نوح"
+    },
+    {
+        "id": "paired_line_20_w04",
+        "rasm": "الأرض",
+        "vowelled": "الْأَرْضِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة نوح"
+    },
+    {
+        "id": "paired_line_20_w05",
+        "rasm": "نباتا",
+        "vowelled": "نَبَاتًا",
+        "prompt_type": "rasm",
+        "surah": "سورة نوح"
+    },
+    {
+        "id": "extra_word_freq_01",
+        "rasm": "فلا",
+        "vowelled": "فَلَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_freq_02",
+        "rasm": "ولا",
+        "vowelled": "وَلَا",
+        "prompt_type": "rasm",
+        "surah": "سورة الفاتحة"
+    },
+    {
+        "id": "extra_word_freq_03",
+        "rasm": "وإذا",
+        "vowelled": "وَإِذَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "extra_word_freq_04",
+        "rasm": "أولئك",
+        "vowelled": "أُولَٰئِكَ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_freq_05",
+        "rasm": "منهم",
+        "vowelled": "مِنْهُمْ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_freq_06",
+        "rasm": "ربهم",
+        "vowelled": "رَبِّهِمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_freq_07",
+        "rasm": "هذا",
+        "vowelled": "هَٰذَا",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_freq_08",
+        "rasm": "عليكم",
+        "vowelled": "عَلَيْكُمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_freq_09",
+        "rasm": "إليه",
+        "vowelled": "إِلَيْهِ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_freq_10",
+        "rasm": "تعملون",
+        "vowelled": "تَعْمَلُونَ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_rare_01",
+        "rasm": "نصيبهم",
+        "vowelled": "نَصِيبَهُمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة هود"
+    },
+    {
+        "id": "extra_word_rare_02",
+        "rasm": "أموالكم",
+        "vowelled": "أَمْوَالُكُمْ",
+        "prompt_type": "vowelled",
+        "surah": "سورة التغابن"
+    },
+    {
+        "id": "extra_word_rare_03",
+        "rasm": "سيئاتهم",
+        "vowelled": "سَيِّئَاتِهِمْ",
+        "prompt_type": "rasm",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "extra_word_rare_04",
+        "rasm": "فارتقب",
+        "vowelled": "فَارْتَقِبْ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الدخان"
+    },
+    {
+        "id": "extra_word_rare_05",
+        "rasm": "حمالة",
+        "vowelled": "حَمَّالَةَ",
+        "prompt_type": "rasm",
+        "surah": "سورة المسد"
+    },
+    {
+        "id": "extra_word_rare_06",
+        "rasm": "الأزواج",
+        "vowelled": "الْأَزْوَاجَ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الزخرف"
+    },
+    {
+        "id": "extra_word_rare_07",
+        "rasm": "أهوى",
+        "vowelled": "أَهْوَىٰ",
+        "prompt_type": "rasm",
+        "surah": "سورة النجم"
+    },
+    {
+        "id": "extra_word_rare_08",
+        "rasm": "بآنية",
+        "vowelled": "بِآنِيَةٍ",
+        "prompt_type": "vowelled",
+        "surah": "سورة الإنسان"
+    },
+    {
+        "id": "extra_word_rare_09",
+        "rasm": "ذكروا",
+        "vowelled": "ذُكِّرُوا",
+        "prompt_type": "rasm",
+        "surah": "سورة الفرقان"
+    },
+    {
+        "id": "extra_word_rare_10",
+        "rasm": "مجيب",
+        "vowelled": "مُّجِيبٌ",
+        "prompt_type": "vowelled",
+        "surah": "سورة هود"
+    }
 ];
 
     let promptDisplayMode = 'vowelled'; // 'vowelled' or 'rasm' (labels stay rasm-only)
@@ -759,9 +1274,11 @@
 
     // 3 Ruled guide lines (tightened so median ink extent ~35px is ~0.73 of band height)
     // Band height = 165 - 117 = 48px -> median extent 35px / 48px = 73% (within 0.7 - 0.8)
-    const GUIDE_TOP_Y = 117;     // Ascender line
-    const GUIDE_BASE_Y = 152;    // Baseline
-    const GUIDE_BOT_Y = 165;     // Descender line
+    // 3 Ruled guide lines (Task 2.17: calibrated from 78.19px median extent to give 72.4% ratio)
+    // Band height = 180 - 72 = 108 CSS px -> 78.19 / 108 = 72.4% (target 0.72 - 0.78), comfortable stylus spacing
+    const GUIDE_TOP_Y = 72;      // Ascender line
+    const GUIDE_BASE_Y = 147;    // Baseline (75px ascender room, 33px descender room)
+    const GUIDE_BOT_Y = 180;     // Descender line
 
     function resizeCanvas() {
       const rect = canvas.getBoundingClientRect();
@@ -999,6 +1516,21 @@
       const deviceName = document.getElementById('deviceInput') ? document.getElementById('deviceInput').value.trim() : 'tablet';
       const stylusName = document.getElementById('stylusInput') ? document.getElementById('stylusInput').value.trim() : 'active_pen';
 
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const bandTop = GUIDE_TOP_Y;
+      const bandBase = GUIDE_BASE_Y;
+      const bandBot = GUIDE_BOT_Y;
+      const bandH = bandBot - bandTop;
+
+      // Band-relative strokes: y relative to GUIDE_TOP_Y
+      const bandRelativeStrokes = strokes.map(stroke => stroke.map(pt => ({
+        x: pt.x,
+        y: pt.y - bandTop,
+        t: pt.t,
+        p: pt.p || 0.5
+      })));
+
       savedSamples.push({
         id: sampleId,
         mode: currentMode,
@@ -1009,7 +1541,19 @@
         device: deviceName,
         stylus: stylusName,
         surah: p.surah,
-        strokes: JSON.parse(JSON.stringify(strokes)),
+        capture_version: "v2",
+        geometry: {
+          capture_version: "v2",
+          band_top_css: bandTop,
+          band_base_css: bandBase,
+          band_bot_css: bandBot,
+          band_height_css: bandH,
+          canvas_w_css: rect.width,
+          canvas_h_css: rect.height,
+          dpr: dpr
+        },
+        strokes: bandRelativeStrokes,
+        strokes_canvas: JSON.parse(JSON.stringify(strokes)),
         dataUrl: dataUrl
       });
 
@@ -1145,18 +1689,25 @@
 
       const files = [];
 
-      // 1. Generate Manifest CSV with all metadata fields
-      let csv = "sample_id,image_file,mode,transcription,writer_id,device,stylus,prompt_type\n";
+      // 1. Generate Manifest CSV with all metadata fields including geometry
+      let csv = "sample_id,image_file,mode,transcription,writer_id,device,stylus,prompt_type,capture_version,band_top_css,band_base_css,band_bot_css,canvas_w_css,canvas_h_css,dpr\n";
       for (const s of savedSamples) {
-        csv += `${s.id},${s.id}.png,${s.mode},"${s.text}",${s.writer_id},${s.device},${s.stylus},${s.prompt_type}\n`;
+        const g = s.geometry || {};
+        csv += `${s.id},${s.id}.png,${s.mode},"${s.text}",${s.writer_id},${s.device},${s.stylus},${s.prompt_type},${s.capture_version || 'v1'},${g.band_top_css || ''},${g.band_base_css || ''},${g.band_bot_css || ''},${g.canvas_w_css || ''},${g.canvas_h_css || ''},${g.dpr || ''}\n`;
       }
       files.push({
         name: "manifest.csv",
         data: new TextEncoder().encode(csv)
       });
 
-      // 2. Generate strokes.json
-      const strokesData = savedSamples.map(s => ({ id: s.id, text: s.text, strokes: s.strokes }));
+      // 2. Generate strokes.json with geometry and band-relative strokes
+      const strokesData = savedSamples.map(s => ({
+        id: s.id,
+        text: s.text,
+        capture_version: s.capture_version || "v2",
+        geometry: s.geometry || null,
+        strokes: s.strokes
+      }));
       files.push({
         name: "strokes.json",
         data: new TextEncoder().encode(JSON.stringify(strokesData, null, 2))
