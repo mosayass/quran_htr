@@ -125,12 +125,49 @@ def run_synthetic_benchmark(
         shards_dir / "synth" / "synth_test_unseen_fonts_diac_000.pt",
     ]
     existing_shards = [p for p in shard_candidates if p.exists()]
+
     if not existing_shards:
+        # Check Drive locations
+        drive_shards = [
+            Path("/content/drive/MyDrive/quran_htr_data/synth_test_000.pt"),
+            Path("/content/drive/MyDrive/quran_htr/data/shards/synth/synth_test_000.pt"),
+            Path("/content/drive/MyDrive/shards_synth/synth_test_000.pt"),
+        ]
+        existing_shards = [p for p in drive_shards if p.exists()]
+
+    if not existing_shards:
+        # Search Drive zips and auto-extract synthetic test shards
+        import zipfile
+        zip_candidates = [
+            Path("/content/drive/MyDrive/quran_htr/dist/shards_corpus_v3.zip"),
+            Path("/content/drive/MyDrive/quran_htr/dist/shards_synth.zip"),
+            Path("/content/drive/MyDrive/shards_corpus_v3.zip"),
+            Path("/content/drive/MyDrive/shards_synth.zip"),
+            Path("dist/shards_corpus_v3.zip"),
+            Path("dist/shards_synth.zip"),
+        ]
+        for z_path in zip_candidates:
+            if z_path.exists():
+                print(f"Extracting synthetic test shards from {z_path}...")
+                (shards_dir / "synth").mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(z_path, "r") as zf:
+                    for member in zf.namelist():
+                        if "synth_test" in member or ("test" in member and member.endswith(".pt")):
+                            target_out = shards_dir / "synth"
+                            zf.extract(member, target_out)
+                existing_shards = sorted(list((shards_dir / "synth").glob("*test*.pt")))
+                if existing_shards:
+                    break
+
+    if not existing_shards:
+        print("[warn] No synth test shards found in data/shards/synth/ or Drive. Searching for any available test shards...")
         existing_shards = sorted(list(shards_dir.glob("**/*test*.pt")))
+
     if not existing_shards:
-        raise FileNotFoundError(f"No test shards found in {shards_dir}")
+        raise FileNotFoundError(f"No test shards found in {shards_dir} or on Google Drive!")
 
     print(f"Loaded {len(existing_shards)} evaluation shard(s): {[p.name for p in existing_shards]}")
+
     combined_ds = ShardDataset(existing_shards, vocab=vocab, augment=False, label_order=order)
     print(f"Total available test samples: {len(combined_ds)}")
 
