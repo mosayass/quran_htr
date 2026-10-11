@@ -20,9 +20,14 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent
 
-# Default calibrated thresholds from Task 2.16 DEV benchmark
-DEFAULT_TAU_STRICT = -0.92   # Calibrated at FAR 1%
-DEFAULT_TAU_RELAXED = -0.71  # Calibrated at FAR 5%
+# Calibrated thresholds:
+# t_accept: Calibrated on DEV true claims (achieving >= 95% true-accept rate, FAR 5%)
+# t_wrong:  Calibrated on DEV corrupted claims (achieving >= 90% WRONG rate on corrupted claims, < 1% false wrong on clean true claims)
+DEFAULT_T_ACCEPT = -0.60
+DEFAULT_T_WRONG = -1.10
+DEFAULT_TAU_STRICT = -0.92   # Legacy compatibility: FAR 1%
+DEFAULT_TAU_RELAXED = -0.60  # Legacy compatibility: FAR 5%
+
 
 
 class WordVerificationResult:
@@ -162,13 +167,19 @@ def verify_text(
     expected_text: str,
     vocab_char2idx: Dict[str, int],
     vocab_idx2char: Dict[int, str],
-    quran_dict: set[str],
-    threshold: float = DEFAULT_TAU_RELAXED,
+    quran_dict: Optional[set[str]] = None,
+    t_accept: float = DEFAULT_T_ACCEPT,
+    t_wrong: float = DEFAULT_T_WRONG,
+    threshold: Optional[float] = None,  # Legacy override: if provided, sets t_accept
     order: str = "visual",
     blank_idx: int = 0,
 ) -> List[WordVerificationResult]:
     """
-    Performs 3-state verification for each word in expected_text given model frame log-probs.
+    Performs 3-state verification (ACCEPT / UNCERTAIN / WRONG) for each word in expected_text
+    given model frame log-probs over CTC forced-alignment segments:
+    - ACCEPT: LLR >= t_accept
+    - WRONG:  LLR <= t_wrong
+    - UNCERTAIN: t_wrong < LLR < t_accept
     """
     words = expected_text.split()
     if not words:
@@ -200,6 +211,8 @@ def verify_text(
     results: List[WordVerificationResult] = []
     max_free_per_frame = np.max(log_probs_np, axis=1)
 
+    tau_acc = threshold if threshold is not None else t_accept
+
     for w_idx_vis, (w_vis, c_start, c_end, w_enc) in enumerate(word_spans):
         active_states = set(range(2 * c_start, 2 * c_end + 1))
         frames = [t for t in range(T) if path[t] in active_states]
@@ -220,16 +233,16 @@ def verify_text(
         orig_w = w_vis[::-1] if order == "visual" else w_vis
         orig_word_idx = len(words) - 1 - w_idx_vis if order == "visual" else w_idx_vis
 
-        is_free_in_dict = (free_dec in quran_dict) and (free_dec != "")
+        is_free_in_dict = bool(quran_dict and (free_dec in quran_dict) and (free_dec != ""))
 
         # 3-State decision policy
-        if llr >= threshold:
+        if llr >= tau_acc:
             state = "ACCEPT"
+        elif llr <= t_wrong:
+            state = "WRONG"
         else:
-            if is_free_in_dict and free_dec != orig_w:
-                state = "WRONG"
-            else:
-                state = "UNCERTAIN"
+            state = "UNCERTAIN"
+
 
         results.append(WordVerificationResult(
             word=orig_w,
@@ -254,7 +267,9 @@ def main():
     p.add_argument("--checkpoint", default="checkpoints/best.pt", help="Path to CRNN checkpoint")
     p.add_argument("--vocab", default="vocab.json", help="Path to vocab.json")
     p.add_argument("--mode", choices=["strict", "relaxed"], default="relaxed", help="Operating threshold mode")
-    p.add_argument("--threshold", type=float, default=None, help="Custom LLR threshold override")
+    p.add_argument("--t_accept", type=float, default=None, help="LLR threshold for ACCEPT")
+    p.add_argument("--t_wrong", type=float, default=None, help="LLR threshold for WRONG")
+    p.add_argument("--threshold", type=float, default=None, help="Custom LLR threshold override for ACCEPT")
     args = p.parse_args()
 
     import torch
@@ -283,18 +298,22 @@ def main():
     with torch.no_grad():
         log_probs = model(img_tensor).squeeze(1).cpu().numpy()
 
-    tau = args.threshold if args.threshold is not None else (DEFAULT_TAU_STRICT if args.mode == "strict" else DEFAULT_TAU_RELAXED)
+    t_acc = args.t_accept if args.t_accept is not None else (args.threshold if args.threshold is not None else DEFAULT_T_ACCEPT)
+    t_wrg = args.t_wrong if args.t_wrong is not None else DEFAULT_T_WRONG
+
     res = verify_text(
         log_probs_np=log_probs,
         expected_text=args.expected,
         vocab_char2idx=vocab.char2idx,
         vocab_idx2char=vocab.idx2char,
         quran_dict=quran_dict,
-        threshold=tau,
+        t_accept=t_acc,
+        t_wrong=t_wrg,
         order=order,
     )
 
-    print(f"\nVerification Results (Mode: {args.mode.upper()}, tau={tau:.3f}):")
+    print(f"\nVerification Results (t_accept={t_acc:.3f}, t_wrong={t_wrg:.3f}):")
+
     print(f"{'Idx':<4} | {'Expected Word':<18} | {'LLR':<8} | {'Free Decode':<18} | {'In Dict':<8} | {'State':<10}")
     print("-" * 75)
     for r in res:

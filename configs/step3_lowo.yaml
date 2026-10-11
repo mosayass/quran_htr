@@ -1,0 +1,48 @@
+# configs/step3_lowo.yaml
+# Step 3: Leave-One-Writer-Out (LOWO) fine-tuning pipeline configuration
+# Mixing: Online strokes 0.5 / Synthetic v3 0.3 / KHATT real ink 0.2
+# Strictly NO checkpoint selection on the held-out writer.
+
+pipeline:
+  step: "3"
+  name: "leave_one_writer_out"
+
+model:
+  backbone: "vgg_lite"
+  label_order: "visual"
+  init_weights: "/content/drive/MyDrive/quran_htr_writer_checkpoints/step2b_v3/best.pt"
+
+training:
+  epochs: 6                     # Fixed 6 epochs
+  samples_per_epoch: 6000       # 6k samples per epoch
+  batch_size: 16
+  lr: 5.0e-5                    # Cosine annealing from 5e-5 down to 5e-6
+  min_lr: 5.0e-6
+  scheduler: "cosine"
+  grad_clip: 5.0
+  num_workers: 2
+
+data_mix:
+  # Mixing ratios: online strokes 0.5 / synth v3 0.3 / KHATT 0.2
+  sources:
+    - path: "data/capture/strokes.json"
+      weight: 0.5
+      type: "online_strokes"
+    - path: "data/shards/synth/synth_train_000.pt"
+      weight: 0.3
+      type: "synthetic_v3"
+    - path: "data/shards/khatt/khatt_train_000.pt"
+      weight: 0.2
+      type: "khatt_real_ink"
+
+lowo_protocol:
+  # Target held-out evaluation writer:
+  held_out_writer: "writer_02"
+  train_writers: ["writer_01"]
+  # Evaluation strictly at the end of fixed 6 epochs (no validation checkpoint selection on held-out)
+  checkpoint_selection: false
+  eval_metrics:
+    - "cer"
+    - "wer"
+    - "closed_set_rank"
+    - "three_state_verification"

@@ -247,13 +247,15 @@ def validate(model, loader, ctc_loss, vocab, device, max_steps=None, label_order
 
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument("--config", default=None, help="Path to YAML training configuration file (e.g. configs/step3_lowo.yaml)")
+
     p.add_argument("--train_manifest", default=None, help="Path to single training manifest CSV or shard")
     p.add_argument("--mix", action="append", default=None,
                    help="Repeatable SOURCE:WEIGHT for weighted sampling (e.g. --mix data/shards/synth:0.75 --mix data/shards/khatt:0.25)")
     p.add_argument("--val_manifest", default=None, help="Synthetic / primary validation source (CSV or shard)")
     p.add_argument("--val_real_manifest", default=None, help="Real-ink (KHATT) validation source (CSV or shard)")
-    p.add_argument("--vocab_path", required=True, help="frozen vocab.json (Vocabulary.save() output)")
-    p.add_argument("--checkpoint_dir", required=True)
+    p.add_argument("--vocab_path", default="vocab.json", help="frozen vocab.json (Vocabulary.save() output)")
+    p.add_argument("--checkpoint_dir", default="checkpoints/step3_lowo")
     p.add_argument("--backbone", default="vgg_lite", choices=["vgg_lite", "mobilenetv3_small"])
     p.add_argument("--backbone_pretrained", default=None,
                    help="Path to pretrained CNN backbone weights (e.g. ahcd_backbone.pt)")
@@ -277,8 +279,28 @@ def main():
                    help="Label reading order: 'logical' (default, RTL) or 'visual' (reversed LTR, matching CTC time frames)")
     args = p.parse_args()
 
+    if args.config:
+        import yaml
+        with open(args.config, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+        if "model" in cfg:
+            if not args.init_weights and "init_weights" in cfg["model"]:
+                args.init_weights = cfg["model"]["init_weights"]
+            if "backbone" in cfg["model"]:
+                args.backbone = cfg["model"]["backbone"]
+            if "label_order" in cfg["model"]:
+                args.label_order = cfg["model"]["label_order"]
+        if "training" in cfg:
+            for k in ["epochs", "samples_per_epoch", "batch_size", "lr", "min_lr", "scheduler", "grad_clip", "num_workers"]:
+                if k in cfg["training"]:
+                    setattr(args, k, cfg["training"][k])
+        if "data_mix" in cfg and "sources" in cfg["data_mix"]:
+            if not args.mix:
+                args.mix = [f"{s['path']}:{s['weight']}" for s in cfg["data_mix"]["sources"]]
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"device: {device} | label_order: {args.label_order}")
+
 
     vocab = Vocabulary.load(args.vocab_path)
     train_loader, val_loader, val_real_loader = build_dataloaders(args, vocab)

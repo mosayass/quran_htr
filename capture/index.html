@@ -1511,7 +1511,8 @@
 
       const prompts = getPrompts();
       const p = prompts[currentIndex];
-      const sampleId = `sample_${currentMode}_${String(currentIndex + 1).padStart(3, '0')}`;
+      const timestamp = Date.now();
+      const sampleId = `sample_${currentMode}_${String(currentIndex + 1).padStart(3, '0')}_${timestamp}`;
       const writerId = document.getElementById('writerIdInput') ? document.getElementById('writerIdInput').value.trim() : 'writer_01';
       const deviceName = document.getElementById('deviceInput') ? document.getElementById('deviceInput').value.trim() : 'tablet';
       const stylusName = document.getElementById('stylusInput') ? document.getElementById('stylusInput').value.trim() : 'active_pen';
