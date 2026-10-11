@@ -208,3 +208,84 @@ This section specifies the standard contract for vector-to-raster conversion whe
   2. **Baseline-Centric Magnification**: Apply $1.3\times$ magnification centered on the estimated writing baseline ($Y_{\text{base}}$), clamped to prevent ascender/descender clipping.
   3. **Post-Zoom Constant Stroke Rendering**: Render strokes with uniform width locked to $2.0\text{ px}$ in the target $64\text{ px}$ coordinate space.
   *(Status: PROVISIONAL — to be frozen after few-shot writer adaptation in Step 3).*
+
+---
+
+## 9. 3-State HTR Verification Specification & Threshold Schema
+
+### 9.1 Verification Algorithm Specification
+
+Given an input line image log-probability matrix $L \in \mathbb{R}^{T \times V}$ and expected logical Arabic text $W = [w_1, w_2, \dots, w_N]$:
+
+1. **Visual-Order Target Preparation**:
+   The model processes frames horizontally Left-to-Right ($t = 0 \dots T-1$). In RTL Arabic writing, the leftmost characters appear first in visual time.
+   - Character sequence is reversed: $S_{\text{vis}} = W_{\text{logical}}[::-1]$.
+   - Words are reversed: $W_{\text{vis}} = [w_N[::-1], \dots, w_1[::-1]]$.
+   - Each word $w_i$ (logical index $i \in [0, N-1]$) maps to visual index $k = N - 1 - i$.
+
+2. **Global CTC Forced Alignment**:
+   Compute Viterbi forced alignment path $\pi^* \in \{0, \dots, 2U\}^T$ over $L$ for target sequence $S_{\text{vis}}$ ($U = \text{len}(S_{\text{vis}})$).
+
+3. **Per-Word Segment Extraction**:
+   For word $w_i$, define active extended CTC states $[2 \cdot c_{\text{start}}, 2 \cdot c_{\text{end}}]$.
+   The temporal frame boundaries are:
+   $$t_1 = \min \{t \mid \pi^*_t \in \text{active\_states}\}, \quad t_2 = \max \{t \mid \pi^*_t \in \text{active\_states}\}$$
+
+4. **Normalized Log-Likelihood Ratio (LLR)**:
+   Over segment frames $[t_1, t_2]$:
+   - Forced score: $s_{\text{exp}} = \text{Viterbi}(L[t_1:t_2+1], \text{enc}(w_i))$.
+   - Free-path score: $s_{\text{free}} = \sum_{t=t_1}^{t_2} \max_{v \in [0, V-1]} L_{t, v}$.
+   - **Per-Character Normalization**:
+     $$\text{LLR} = \frac{s_{\text{exp}} - s_{\text{free}}}{\max(1, \text{len}(\text{enc}(w_i)))}$$
+     *(Normalizing per character prevents single-letter errors from being diluted across long frame spans).*
+
+5. **3-State Decision Policy**:
+   $$\text{Verdict}(w_i) = \begin{cases} \text{ACCEPT}, & \text{if } \text{LLR} \ge t_{\text{accept}} \\ \text{WRONG}, & \text{if } \text{LLR} \le t_{\text{wrong}} \\ \text{UNCERTAIN}, & \text{if } t_{\text{wrong}} < \text{LLR} < t_{\text{accept}} \end{cases}$$
+
+---
+
+### 9.2 Operating Thresholds & Configuration Schema
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HafizVerificationConfig",
+  "type": "object",
+  "properties": {
+    "normalization": {
+      "type": "string",
+      "enum": ["char", "frame"],
+      "default": "char"
+    },
+    "operating_mode": {
+      "type": "string",
+      "enum": ["relaxed", "strict"],
+      "default": "relaxed"
+    },
+    "thresholds": {
+      "type": "object",
+      "properties": {
+        "relaxed": {
+          "description": "Calibrated for everyday recitation checks (FAR ~5%, FRR <1%)",
+          "properties": {
+            "t_accept": { "type": "number", "default": -0.60 },
+            "t_wrong": { "type": "number", "default": -0.95 }
+          },
+          "required": ["t_accept", "t_wrong"]
+        },
+        "strict": {
+          "description": "Calibrated for rigorous certification / mutashabihat tests (FAR ~1%)",
+          "properties": {
+            "t_accept": { "type": "number", "default": -0.40 },
+            "t_wrong": { "type": "number", "default": -0.80 }
+          },
+          "required": ["t_accept", "t_wrong"]
+        }
+      },
+      "required": ["relaxed", "strict"]
+    }
+  },
+  "required": ["normalization", "operating_mode", "thresholds"]
+}
+```
+

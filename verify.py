@@ -172,6 +172,7 @@ def verify_text(
     t_wrong: float = DEFAULT_T_WRONG,
     threshold: Optional[float] = None,  # Legacy override: if provided, sets t_accept
     order: str = "visual",
+    norm: str = "char",  # "char" (per-character normalization) or "frame" (legacy per-frame)
     blank_idx: int = 0,
 ) -> List[WordVerificationResult]:
     """
@@ -219,6 +220,7 @@ def verify_text(
         t1 = min(frames) if frames else 0
         t2 = max(frames) if frames else T - 1
         seg_len = max(1, t2 - t1 + 1)
+        char_len = max(1, len(w_enc))
 
         seg_lp = log_probs_np[t1 : t2 + 1]
 
@@ -226,7 +228,10 @@ def verify_text(
         _, s_exp = ctc_viterbi_alignment(seg_lp, w_enc, blank_idx=blank_idx)
         s_free = float(np.sum(max_free_per_frame[t1 : t2 + 1]))
 
-        llr = (s_exp - s_free) / seg_len
+        # Per-character vs per-frame normalization
+        norm_factor = char_len if norm == "char" else seg_len
+        llr = (s_exp - s_free) / norm_factor
+
 
         # Free-path greedy decode over the same frames
         free_dec = greedy_decode_segment(seg_lp, vocab_idx2char, blank_idx=blank_idx, order=order)
