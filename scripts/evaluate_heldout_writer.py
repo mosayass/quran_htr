@@ -204,11 +204,16 @@ def main():
         augment=False,
     )
 
-    # Filter strictly for held_out_writer
+    available_writers = set(s[3] for s in ds.samples)
+    is_dry_run = args.held_out_writer not in available_writers
+    if is_dry_run:
+        print(f"\n[Notice] Writer '{args.held_out_writer}' not in dataset yet (available: {sorted(list(available_writers))}).")
+        print("Running pipeline dry-run on writer_01 samples to validate evaluation script...")
+
     writer_samples = []
     for idx in range(len(ds)):
         sid, _, text, wid, _ = ds.samples[idx]
-        if wid == args.held_out_writer or (args.held_out_writer not in [s[3] for s in ds.samples] and wid == "writer_01"):
+        if wid == args.held_out_writer or (is_dry_run and wid == "writer_01"):
             sample = ds[idx]
             writer_samples.append({
                 "sample_id": sid,
@@ -216,9 +221,11 @@ def main():
                 "text": sample.text,
             })
 
+    target_label = f"{args.held_out_writer} (Dry-Run on writer_01)" if is_dry_run else args.held_out_writer
     print("=" * 80)
-    print(f"STEP 3 LOWO EVALUATION: HELD-OUT WRITER [{args.held_out_writer}] ({len(writer_samples)} samples)")
+    print(f"STEP 3 LOWO EVALUATION: HELD-OUT WRITER [{target_label}] ({len(writer_samples)} samples)")
     print("=" * 80)
+
 
     # 1. Baseline Evaluation
     print(f"[1/2] Evaluating Baseline Model: {args.baseline_checkpoint}")
