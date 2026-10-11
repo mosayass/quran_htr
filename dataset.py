@@ -455,10 +455,10 @@ class StrokeDataset(Dataset):
                 from render_strokes import render_strokes
             except ImportError:
                 import sys
-                from pathlib import Path
                 root = Path(__file__).resolve().parent
                 sys.path.insert(0, str(root / "scripts"))
                 from render_strokes import render_strokes
+
 
         self.render_fn = render_strokes
         self.vocab = vocab
