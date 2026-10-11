@@ -9,4 +9,5 @@
    - Dot-family swap: **100.0% WRONG**, 0.0% ACCEPT (jump from 29.8% under frame-norm).
    - Letter del/ins: **100.0% WRONG**, 0.0% ACCEPT (jump from 38.5% under frame-norm).
 4. **verify_ref.py & Golden Vectors (RAN)**: Pure NumPy reference created with explicit visual-order reversal. 20 golden vectors in `tests/golden/golden_vectors.json`; `scripts/verify_ref.py --golden` passed 20/20. Section 9 added to `docs/inference_contract.md`.
-5. **data/capture_v2/ Ingestion (NOT RUN)**: Directory does not exist yet (awaiting Writer 02 export). `scripts/ingest_capture_v2.py` staged for automatic validation upon upload.
+5. **data/capture_v2/ Ingestion (RAN)**: Ingested `data/capture_v2/writer_02/` (148 saves, 145 unique samples, latest-save dedupe). 100% v2 geometry schema valid, 100% transcriptions encodable in `vocab.json`, zero empty strokes. No training performed.
+

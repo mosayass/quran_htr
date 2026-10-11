@@ -21,7 +21,8 @@ runs/
 logs/
 
 # Data and manifests (keep raw dataset and generated manifests local)
-data/
+data/*
+
 !data/capture_prompts.json
 !data/tanzil/quran-simple.txt
 !data/tanzil/quran-simple-clean.txt
@@ -31,6 +32,9 @@ data/
 !data/capture/manifest.csv
 !data/capture/*.png
 !data/capture/strokes.json
+!data/capture_v2/
+!data/capture_v2/**
+
 manifests/
 tiny_khatt/
 test_ckpt/
