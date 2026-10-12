@@ -194,20 +194,29 @@ This section specifies the standard contract for vector-to-raster conversion whe
 
 ---
 
-### 8.3 Stroke-Width Empirical Findings & Candidate Preprocessing Policy (Provisional)
+### 8.3 Canonical Zoom Semantics & Preprocessing Contract
 
-- **Stroke-Width Sensitivity**:
-  Diagnostic re-render sweeps on tablet vector strokes demonstrated that the CNN backbone is sensitive to stroke dilation:
-  - Uniform thin-to-medium stroke ($1.8–2.2\text{ px}$ post-zoom) achieves optimal character recognition.
-  - Heavier strokes ($3.6\text{ px}$) severely degrade CER to $37.5\%$.
-  - Stylus pressure-varying stroke width degrades CER to $39.8\%$ due to inconsistent ink mass across character bodies and diacritics. Constant stroke rendering is strictly enforced.
-- **Scale & Vertical Geometry**:
-  A fixed wide ruled band ($H_{\text{band}} = 150\text{ px}$) caused digital stylus handwriting to occupy only $35\text{ px}$ (37% of vertical height), whereas training data (KHATT) occupies $\sim 59\text{ px}$ (92% of height).
-- **Provisional Preprocessing Policy**:
-  1. **Tightened Band Framing**: Align capture guidelines such that the writer's median ink extent occupies $70\%–80\%$ of vertical crop height.
-  2. **Baseline-Centric Magnification**: Apply $1.3\times$ magnification centered on the estimated writing baseline ($Y_{\text{base}}$), clamped to prevent ascender/descender clipping.
-  3. **Post-Zoom Constant Stroke Rendering**: Render strokes with uniform width locked to $2.0\text{ px}$ in the target $64\text{ px}$ coordinate space.
-  *(Status: PROVISIONAL — to be frozen after few-shot writer adaptation in Step 3).*
+- **Canonical Band Definition**:
+  The canonical reference scale is strictly defined by the **v2 ruled band height ($108\text{ CSS px}$)**.
+  All stroke coordinates are mapped into the canonical $64\text{ px}$ model input tensor relative to this baseline band.
+
+- **Zoom Semantics by Data Source**:
+  - **v2 Samples (`data/capture_v2/`)**: Default canonical zoom is strictly **$\mathbf{1.0}$** ($\text{zoom} = 1.0$).
+  - **v1 Legacy Samples (`data/capture/`)**: Default zoom scales by the band ratio:
+    $$\text{zoom}_{\text{v1}} = \frac{150}{108} \approx 1.3889 \quad (\sim 1.39)$$
+    This exactly normalizes the legacy $150\text{ px}$ capture band to parity with the canonical $108\text{ px}$ v2 band.
+
+- **Stroke Width After Zoom**:
+  - Nominal inference stroke width after zoom: **$2.2\text{ px}$** (calibrated within the $1.8–2.6\text{ px}$ human ink window).
+  - Uniform stroke dilation is enforced across all frames (pressure-varying dilation is excised).
+
+- **Data Augmentation Contract (`StrokeDataset`)**:
+  During model fine-tuning with vector strokes:
+  1. **Zoom Augmentation**: Random multiplier uniformly sampled in $[0.8, 1.3]$ around canonical zoom:
+     $$\text{zoom}_{\text{train}} = \text{zoom}_{\text{canonical}} \times \text{Uniform}(0.8, 1.3)$$
+  2. **Width Augmentation**: Stroke width after zoom uniformly sampled in $[1.8, 2.6]\text{ px}$:
+     $$W_{\text{train}} = \text{Uniform}(1.8, 2.6)\text{ px}$$
+  3. **Affine & Elastic Perturbations**: Rotation $[-3^\circ, +3^\circ]$, shear $[-0.15, +0.15]$, wobble amplitude $[0.0, 1.2]$, and anchor jitter $[0.0, 0.4]$.
 
 ---
 

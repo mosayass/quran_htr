@@ -443,8 +443,8 @@ class StrokeDataset(Dataset):
         split: Optional[str] = None,
         augment: bool = True,
         label_order: str = "visual",
-        zoom_range: Tuple[float, float] = (1.0, 1.8),
-        width_range: Tuple[float, float] = (1.4, 2.6),
+        zoom_multiplier_range: Tuple[float, float] = (0.8, 1.3),
+        width_range: Tuple[float, float] = (1.8, 2.6),
         seed: Optional[int] = None,
     ):
         import json
@@ -465,7 +465,7 @@ class StrokeDataset(Dataset):
         self.split = split.lower() if split else None
         self.augment = augment
         self.label_order = label_order
-        self.zoom_range = zoom_range
+        self.zoom_multiplier_range = zoom_multiplier_range
         self.width_range = width_range
         self.seed = seed
 
@@ -528,7 +528,7 @@ class StrokeDataset(Dataset):
         import random
         sid, strokes, text, wid, geom = self.samples[idx]
 
-        # Geometry resolution
+        # Canonical zoom resolution (canonical band is v2: 108 CSS px)
         if geom:
             band_top = float(geom.get("band_top_css", 0.0))
             band_base = float(geom.get("band_base_css", 147.0))
@@ -538,14 +538,17 @@ class StrokeDataset(Dataset):
             render_band_top = 0.0
             render_center_y = band_base - band_top
             render_band_h = band_h
+            canonical_zoom = 1.0
         else:
-            # Legacy v1 capture geometry
+            # Legacy v1 capture geometry (150 CSS px band -> scale to 108 CSS px canonical)
             render_band_top = 50.0
             render_center_y = 160.0
             render_band_h = 150.0
+            canonical_zoom = 150.0 / 108.0
 
         if self.augment:
-            zoom = random.uniform(self.zoom_range[0], self.zoom_range[1])
+            zoom_mult = random.uniform(self.zoom_multiplier_range[0], self.zoom_multiplier_range[1])
+            zoom = canonical_zoom * zoom_mult
             width = random.uniform(self.width_range[0], self.width_range[1])
             rot = random.uniform(-3.0, 3.0)
             shear = random.uniform(-0.15, 0.15)
@@ -566,8 +569,8 @@ class StrokeDataset(Dataset):
         else:
             img = self.render_fn(
                 strokes,
-                zoom=1.4,
-                width_after_zoom=1.8,
+                zoom=canonical_zoom,
+                width_after_zoom=2.2,
                 center_y=render_center_y,
                 band_top_y=render_band_top,
                 band_height=render_band_h,

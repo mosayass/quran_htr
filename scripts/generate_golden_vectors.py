@@ -65,8 +65,8 @@ def generate_golden_suite():
         text = item["text"]
         strokes = item["strokes"]
 
-        # Render 64px image
-        img = render_strokes(strokes, zoom=1.4, width_after_zoom=1.8)
+        # Render 64px image with canonical zoom (v1: 150/108, stroke width: 2.2px)
+        img = render_strokes(strokes, zoom=(150.0 / 108.0), width_after_zoom=2.2)
         w, h = img.size
 
         # Tensor preprocessing identical to dataset.py / inference contract
