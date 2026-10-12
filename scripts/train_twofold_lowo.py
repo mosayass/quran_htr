@@ -219,16 +219,16 @@ def recalibrate_thresholds(model: nn.Module, calib_samples: List[dict], vocab: V
             out = model(inp).squeeze(1).cpu().numpy()  # (T, V)
             txt = s["text"]
             # True claim
-            v_res = verify_reference(out, txt, vocab=vocab, label_order="visual", norm_mode="char", t_accept=-0.6, t_wrong=-0.95)
-            for w_eval in v_res.get("words", []):
+            v_res = verify_reference(out, txt, vocab.char2idx, vocab.idx2char, t_accept=-0.6, t_wrong=-0.95, order="visual", norm="char")
+            for w_eval in v_res:
                 true_llrs.append(w_eval["llr"])
 
             # Corrupted claim
             c_info = apply_corruption(txt, "dot_swap", q_dict, mut_dict, rng)
             if c_info:
                 c_txt, _ = c_info
-                cv_res = verify_reference(out, c_txt, vocab=vocab, label_order="visual", norm_mode="char", t_accept=-0.6, t_wrong=-0.95)
-                for w_eval in cv_res.get("words", []):
+                cv_res = verify_reference(out, c_txt, vocab.char2idx, vocab.idx2char, t_accept=-0.6, t_wrong=-0.95, order="visual", norm="char")
+                for w_eval in cv_res:
                     corr_llrs.append(w_eval["llr"])
 
     if not true_llrs:
@@ -278,8 +278,8 @@ def evaluate_test_set(model: nn.Module, test_samples: List[dict], vocab: Vocabul
                 word_pred.append(pred_txt)
 
             # True claim 3-state
-            v_res = verify_reference(log_probs, gt_txt, vocab=vocab, label_order="visual", norm_mode="char", t_accept=t_acc, t_wrong=t_wrong)
-            for w in v_res.get("words", []):
+            v_res = verify_reference(log_probs, gt_txt, vocab.char2idx, vocab.idx2char, t_accept=t_acc, t_wrong=t_wrong, order="visual", norm="char")
+            for w in v_res:
                 true_states[w["state"]] += 1
 
             # Corrupted claims
@@ -287,10 +287,10 @@ def evaluate_test_set(model: nn.Module, test_samples: List[dict], vocab: Vocabul
                 c_info = apply_corruption(gt_txt, ct, q_dict, mut_dict, rng)
                 if c_info:
                     c_txt, _ = c_info
-                    cv_res = verify_reference(log_probs, c_txt, vocab=vocab, label_order="visual", norm_mode="char", t_accept=t_acc, t_wrong=t_wrong)
+                    cv_res = verify_reference(log_probs, c_txt, vocab.char2idx, vocab.idx2char, t_accept=t_acc, t_wrong=t_wrong, order="visual", norm="char")
                     corr_wrg[ct]["TOTAL"] += 1
                     # If any word is flagged WRONG, claim is caught
-                    if any(w["state"] == "WRONG" for w in cv_res.get("words", [])):
+                    if any(w["state"] == "WRONG" for w in cv_res):
                         corr_wrg[ct]["WRONG"] += 1
 
     all_gt = line_gt + word_gt
