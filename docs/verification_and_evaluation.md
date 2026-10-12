@@ -43,7 +43,7 @@ Model Log-Probabilities L [T, V]    Expected Text: "وقيل يا أرض ابل�
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ 5. 3-State Decision Policy                                  │
+│ 5. 3-State Decision Policy (PROVISIONAL — Provenance: w01 DEV) │
 │    - LLR >= t_accept (-0.60) ──> ACCEPT                     │
 │    - LLR <= t_wrong  (-0.95) ──> WRONG                      │
 │    - Otherwise               ──> UNCERTAIN                  │
@@ -65,23 +65,36 @@ Normalizing by the number of characters in the word:
 $$\text{LLR}_{\text{char}} = \frac{s_{\text{exp}} - s_{\text{free}}}{\max(1, \text{len}(\text{enc}(w_i)))}$$
 
 Dividing the same $\Delta = -10.0$ by $4$ characters yields $\text{LLR} = -2.50$, cleanly falling below $t_{\text{wrong}} = -0.95$.
-- **Empirical Impact**:
-  - Synthetic test shards: Dot-family detection jumped from **$29.8\% \to 100.0\%$ WRONG**.
-  - Letter deletion/insertion jumped from **$38.5\% \to 100.0\%$ WRONG**.
-  - True claim acceptance remained unaffected at **$100.0\%$ ACCEPT**.
-  - Real writer 02 data: Single-letter corruptions caught at **$90.3\%–91.0\%$ WRONG**.
+- **Empirical Impact with Explicit Provenance and True-Accept Rates**:
+  - **Synthetic Held-Out** (`synth_test_000.pt`, 200 words):
+    - True-Accept Rate: **100.0% ACCEPT**
+    - Dot-family swap detection: **100.0% WRONG** (jumped from 29.8%)
+    - Letter deletion/insertion detection: **100.0% WRONG** (jumped from 38.5%)
+    - Whole word swap detection: **100.0% WRONG**
+  - **`writer_01` In-Sample DEV** (40 lines, 60 words):
+    - True-Accept Rate: **93.7% ACCEPT**
+    - Corrupted claim detection: **$\ge 90.3\%$ WRONG** across all error types
+  - **`writer_02` Held-Out (Frozen Thresholds from `writer_01` DEV)** (20 lines, 125 words):
+    - True-Accept Rate: **41.3% ACCEPT** (48.3% False-Reject due to unadapted writer domain shift)
+    - Dot swap detection: **91.0% WRONG** (2.5% ACCEPT, 6.6% UNC)
+    - Letter deletion/insertion detection: **90.3% WRONG** (4.8% ACCEPT, 4.8% UNC)
+    - Word swap detection: **100.0% WRONG** (0.0% ACCEPT)
 
 ---
 
-## 4. Operating Threshold Sets
+## 4. Operating Threshold Sets (PROVISIONAL)
 
-| Parameter | Relaxed Mode (Default / Everyday) | Strict Mode (Rigorous Certification) |
-| :--- | :---: | :---: |
-| **$t_{\text{accept}}$** | **$-0.60$** | **$-0.40$** |
-| **$t_{\text{wrong}}$** | **$-0.95$** | **$-0.80$** |
-| **Calibration Target** | 95% True Acceptance on DEV ink | 99% Corruption Rejection |
-| **True Accept (w01)** | **93.7%** | 84.1% (excessive false reject) |
-| **Corrupted Wrong** | **$\ge 90.3\%$** | $\ge 98.5\%$ |
+> **PROVISIONAL NOTICE**: These operating thresholds were calibrated exclusively in-sample on `writer_01` DEV ink. They are provisional pending multi-writer fine-tuning (Folds A/B/C) and multi-writer calibration.
+
+| Parameter | Relaxed Mode (Default / Everyday) | Strict Mode (Rigorous Certification) | Provenance & Calibration Basis |
+| :--- | :---: | :---: | :--- |
+| **$t_{\text{accept}}$** | **$-0.60$** (PROVISIONAL) | **$-0.40$** (PROVISIONAL) | `writer_01` in-sample DEV |
+| **$t_{\text{wrong}}$** | **$-0.95$** (PROVISIONAL) | **$-0.80$** (PROVISIONAL) | `writer_01` in-sample DEV |
+| **Calibration Target** | 95% True Acceptance on DEV ink | 99% Corruption Rejection | In-sample DEV tuning target |
+| **True Accept (w01)** | **93.7% ACCEPT** | 84.1% ACCEPT | `writer_01` in-sample DEV |
+| **True Accept (w02)** | **41.3% ACCEPT** | 29.1% ACCEPT | `writer_02` held-out (frozen w01 thresholds) |
+| **Corrupted Wrong (w01)**| **$\ge 90.3\%$ WRONG** | $\ge 98.5\%$ WRONG | `writer_01` in-sample DEV |
+| **Corrupted Wrong (w02)**| **$90.3\%–100.0\%$ WRONG** | $94.2\%–100.0\%$ WRONG | `writer_02` held-out (frozen w01 thresholds) |
 
 ---
 
@@ -105,7 +118,9 @@ To measure how well the acoustic/visual model discriminates words within a close
 
 ---
 
-## 6. Golden Reference Vectors (`tests/golden/golden_vectors.json`)
+## 6. Golden Reference Vectors (`tests/golden/golden_vectors.json`, PROVISIONAL)
+
+> **PROVISIONAL NOTICE**: Golden test vectors were synthesized using the uncalibrated PyTorch inference path on `writer_01` legacy ink under provisional thresholds ($t_{\text{acc}}=-0.60, t_{\text{wrg}}=-0.95$). While they pass 20/20 in regression tests, they are provisional and will be re-exported once multi-writer scale normalization and thresholds are locked in production.
 
 To ensure that mobile client ports (Flutter/Dart or iOS Swift) achieve bit-level behavioral parity with the Python reference, 20 test vectors (10 lines, 10 words) are committed in [tests/golden/golden_vectors.json](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/tests/golden/golden_vectors.json).
 

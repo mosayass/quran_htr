@@ -37,12 +37,12 @@ Evaluated with the un-adapted production model ([checkpoints/best.pt](file:///c:
 
 *Under canonical 1.0x, median rank dropped from 19.0 down to 2.0, showing strong lexical discrimination despite handwriting domain shift.*
 
-### 3-State Verification Outcomes (Canonical 1.0x, Frozen Thresholds)
+### 3-State Verification Outcomes (Canonical 1.0x, Provenance: writer_02 Held-Out, Frozen w01 DEV Thresholds)
 - **TRUE Claims** (230 words in 145 samples):
-  - **ACCEPT**: **41.3%**
+  - **True-Accept Rate**: **41.3% ACCEPT**
   - **UNCERTAIN**: **10.4%**
-  - **WRONG**: **48.3%** *(False reject caused by lack of writer adaptation)*
-- **CORRUPTED Claims Rejection Rate (WRONG)**:
+  - **WRONG**: **48.3%** *(False reject caused by domain shift of unadapted writer)*
+- **CORRUPTED Claims Detection Rate (WRONG)** (Paired with 41.3% True-Accept):
   - **Dot Swap**: **91.0% WRONG** (2.5% ACCEPT, 6.6% UNC)
   - **Del / Ins**: **90.3% WRONG** (4.8% ACCEPT, 4.8% UNC)
   - **Word Swap**: **100.0% WRONG** (0.0% ACCEPT)
@@ -52,25 +52,33 @@ Evaluated with the un-adapted production model ([checkpoints/best.pt](file:///c:
 
 ---
 
-## 3. The Self-Calibration Experiment: Why Fine-Tuning Is Mandatory
+## 3. Self-Calibration Analysis: Retraction of Invalid Sweep & Valid Protocol Results
 
-To test whether the 48.3% false-rejection rate on `writer_02` could be resolved simply by recalibrating thresholds without retraining the neural network, a self-calibration experiment was conducted ([scripts/test_self_calibration.py](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/scripts/test_self_calibration.py)):
+### A. Retraction of Task 2.21 Inverted Sweep
+The previous claim that self-calibration "proved fine-tuning is mandatory" was **RETRACTED as INVALID**:
+- In the initial sweep, independent percentiles yielded $t_{\text{accept}} = -2.9919$ and $t_{\text{wrong}} = -1.4860$.
+- Because $t_{\text{accept}} < t_{\text{wrong}}$, the monotonic ordering contract ($t_{\text{wrong}} \le t_{\text{accept}}$) was violated. Scores between $-2.99$ and $-1.49$ were logically undefined / simultaneously triggered contradictory rules.
 
-### Protocol:
-1. Calibrate thresholds exclusively from the **first 20 samples of `writer_02`**:
-   - $t_{\text{accept}} = -2.9919$ (5th percentile of true claims)
-   - $t_{\text{wrong}} = -1.4860$ (90th percentile of corrupted claims)
-   - *Notice that $t_{\text{accept}} < t_{\text{wrong}}$, indicating extreme distribution overlap!*
-2. Evaluate the **remaining 125 samples without any model fine-tuning**.
+### B. Valid Monotonic Self-Calibration Protocol (Task 2.22 Item C)
+A mathematically valid evaluation was executed ([scripts/test_valid_self_calibration.py](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/scripts/test_valid_self_calibration.py)) enforcing strict monotonicity:
+$$t_{\text{wrong}} \le t_{\text{accept}}$$
+- **Monte Carlo Setup**: 20 independent random draws evaluated across calibration sample sizes $N \in \{10, 20, 40\}$ drawn from `writer_02` prompt groups, evaluated on remaining held-out groups with zero neural network fine-tuning.
+- **Results with Spread (Mean ± Std over 20 draws)**:
 
-### Results:
-- **TRUE Claims Acceptance**: Jumped from $41.3\% \to \mathbf{94.4\%}$ ACCEPT.
-- **CORRUPTED Claims Detection**: **Collapsed from $95.1\% \to \mathbf{64.8\%}$ WRONG**.
-  - Dot-family swaps: WRONG dropped to **32.4%** (67.6% missed!).
-  - Letter deletions/insertions: WRONG dropped to **24.8%** (75.2% missed!).
+| Metric / Error Type | $N = 10$ Calibration Samples | $N = 20$ Calibration Samples | $N = 40$ Calibration Samples |
+| :--- | :---: | :---: | :---: |
+| **Calibrated $t_{\text{accept}}$** | $-2.50 \pm 0.46$ | $-2.32 \pm 0.35$ | $-2.47 \pm 0.27$ |
+| **Calibrated $t_{\text{wrong}}$** | $-2.70 \pm 0.46$ | $-2.52 \pm 0.35$ | $-2.67 \pm 0.27$ |
+| **TRUE Claims (True-Accept Rate)** | **$87.5\% \pm 8.1\%$** | **$84.8\% \pm 6.5\%$** | **$87.2\% \pm 5.5\%$** |
+| **Dot Swap Detection (WRONG)** | $40.3\% \pm 12.6\%$ | $45.0\% \pm 10.2\%$ | $40.5\% \pm 8.5\%$ |
+| **Letter Del / Ins (WRONG)** | $29.4\% \pm 12.9\%$ | $33.3\% \pm 10.1\%$ | $29.1\% \pm 7.8\%$ |
+| **Adjacent Word Swap (WRONG)** | $63.1\% \pm 13.0\%$ | $70.0\% \pm 11.7\%$ | $64.0\% \pm 11.9\%$ |
+| **Skip Word (WRONG)** | $68.9\% \pm 5.7\%$ | $70.9\% \pm 5.5\%$ | $72.6\% \pm 10.4\%$ |
+| **Mutashabih Substitution (WRONG)** | $92.3\% \pm 2.9\%$ | $93.4\% \pm 2.2\%$ | $92.7\% \pm 2.3\%$ |
+| **Whole Word Swap (WRONG)** | **$97.0\% \pm 1.5\%$** | **$97.8\% \pm 1.1\%$** | **$97.2\% \pm 1.6\%$** |
 
-### Critical Conclusion:
-Domain shift between different human writers shifts the entire un-adapted feature space. Simply loosening detection thresholds on an unadapted model creates catastrophic false accepts on corrupted claims. **Weight fine-tuning (few-shot personalization or LOWO) is mathematically required.**
+### Empirical Takeaway:
+When thresholds are recalibrated monotonically to achieve acceptable True-Accept rates ($\sim 85\%–87\%$), **macro word errors remain reliably detected ($97\%–98\%$)**, but **subtle single-character corruptions (dot swaps $\sim 40\%–45\%$, deletions $\sim 29\%–33\%$) suffer substantial degradation**. This confirms that without weight fine-tuning, threshold tuning alone cannot resolve fine-grained character boundary confusion on new handwriting styles.
 
 ---
 

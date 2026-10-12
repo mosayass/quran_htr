@@ -21,14 +21,19 @@ A major source of confusion in earlier evaluation phases was the discrepancy in 
   * Stylus Pressure: Median 0.698 (heavy ink)     * Stylus Pressure: Median 0.216 (light ink)
 ```
 
-### Why 1.4x Zoom Worked on v1 but Failed on v2
-- In **v1**, the wide $150\text{ px}$ band caused `writer_01` to write relatively small strokes that occupied only **52.1%** of the band height. Applying a $1.4\times$ zoom magnified the small strokes to occupy $\sim 73\%$ of the $64\text{ px}$ CNN input height, dropping CER from $27.02\%$ to **$22.66\%$**.
-- In **v2**, the band was redesigned to a tighter **$108\text{ px}$**. `writer_02` naturally filled **$86.0\%$** of the band. When an unthinking $1.4\times$ zoom was applied to `writer_02`, the strokes were magnified to over $120\%$ of the input window, clipping ascenders/descenders and dilating stroke bodies into heavy blobs. This blew up `writer_02` CER to **$53.66\%$**.
-- Evaluating `writer_02` at its **canonical $1.0\times$ scale** immediately lowered CER to **$37.24\%$** (lines CER dropped from $44.02\%$ to $33.59\%$, words CER from $63.08\%$ to $40.82\%$).
+### Why 1.4x Zoom Worked on v1 but Failed on v2: Root Cause Analysis
+- **Root Cause = Band Double-Counting plus Vertical Clipping**:
+  1. **Band Double-Counting ($150/108 \approx 1.39$)**: The legacy v1 canvas had a 150px band, whereas the v2 canvas has a 108px band. The ratio $150 / 108 \approx 1.389$ meant that an empirical $1.4\times$ zoom on v1 simply normalized the 150px band down to parity with the 108px band.
+  2. When an additional $1.4\times$ zoom was applied to v2 (which already had the 108px band), the scale factor was double-counted ($1.39 \times 1.4 \approx 1.94$).
+  3. **Vertical Clipping for Writers Who Fill the Band**: `writer_02` naturally fills **86.0%** of the band (median ink extent 92.9 px, body height 92.9 px), compared to `writer_01` who filled only 52.1% (78.2 px). Under double-counting, `writer_02` ink was magnified to $> 120\%$ of the 64px input tensor, physically clipping ascenders and descenders against the tensor boundary.
+  4. **Dilation Only as a Hypothesis**: Stroke dilation was initially hypothesized, but empirical analysis demonstrates that physical boundary clipping from band double-counting is the primary mathematical mechanism.
+- Evaluating `writer_02` at its **canonical $1.0\times$ scale** eliminated clipping and immediately restored CER to **$37.24\%$** (lines CER dropped from $44.02\%$ to $33.59\%$, words CER from $63.08\%$ to $40.82\%$).
 
 ---
 
-## 2. Canonical Zoom Semantics Contract
+## 2. Canonical Zoom Semantics Contract (PROVISIONAL)
+
+> **PROVISIONAL NOTICE**: This canonical zoom policy ($1.0$ for v2, $150/108$ for legacy v1) and global target fill (target 48px / 75% in 64px tensor, clamped to never clip ink) is provisional pending validation across additional volunteer writers.
 
 To ensure unified behavior across all past and future capture sets, the **canonical reference band is locked to the v2 band ($108\text{ CSS px}$)**:
 

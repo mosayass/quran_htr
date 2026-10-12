@@ -188,25 +188,31 @@
   <!-- Consent Modal -->
   <div id="consentModal" class="modal-overlay">
     <div class="modal-content">
-      <div class="modal-title">مشروع حافظ — دراسة التحقق من خط اليد القرآني</div>
+      <div class="modal-title">مشروع حافظ — دراسة التحقق من خط اليد القرآني<br><span style="font-size: 0.95rem; color: #94a3b8; font-weight: normal;">Hafiz Project — Quranic Handwriting Verification Study</span></div>
       <div class="modal-body">
-        <p>أهلاً بك! تهدف هذه الدراسة إلى تدريب وتطوير خوارزميات ذكاء اصطناعي (HTR) للتعرف على خطوط اليد القرآنية ودعم حفظة كتاب الله.</p>
+        <p><strong>العربية:</strong> أهلاً بك! تهدف هذه الدراسة إلى تدريب وتطوير نماذج ذكاء اصطناعي (HTR) للتعرف على خطوط اليد القرآنية ودعم حفظة كتاب الله.</p>
         <ul style="list-style: square;">
-          <li><strong>البروتوكول القصير:</strong> 40 عينة فقط (10 أسطر + 30 كلمة).</li>
-          <li><strong>الوقت المتوقع:</strong> 10 إلى 12 دقيقة تقريباً.</li>
-          <li><strong>الخصوصية التامة:</strong> المعرف مجهول تماماً ولا تُجمع أي بيانات شخصية (فقط إحداثيات القلم وسرعة الحركة).</li>
-          <li><strong>التصدير الفوري:</strong> عند الانتهاء يمكنك تنزيل ملف ZIP وحفظه بضغطة زر.</li>
+          <li><strong>البروتوكول القصير:</strong> 40 عينة فقط (10 أسطر + 30 كلمة)، يستغرق 10–12 دقيقة.</li>
+          <li><strong>الخصوصية التامة:</strong> المعرف مجهول تماماً ولا تُجمع أي بيانات شخصية (فقط إحداثيات القلم).</li>
+          <li><strong>التصدير الفوري:</strong> عند الانتهاء يمكنك تنزيل ملف ZIP بضغطة زر وإرساله للمشرف.</li>
         </ul>
-        <p style="color: #38bdf8;">باستخدامك للقلم والكتابة على الشاشة، فإنك تساهم في خدمة كتاب الله تعالى.</p>
+        <hr style="border: 0; border-top: 1px solid var(--border); margin: 0.75rem 0;">
+        <p style="direction: ltr; text-align: left;"><strong>English:</strong> Welcome! This study collects handwriting samples to train and validate AI models (HTR) for verifying handwritten Quranic text.</p>
+        <ul style="direction: ltr; text-align: left; list-style: square; margin-left: 1.5rem;">
+          <li><strong>Protocol:</strong> 40 short prompts (10 lines + 30 words), takes ~10–12 minutes.</li>
+          <li><strong>Full Privacy:</strong> Anonymous ID; no personal data collected (only stroke coordinates and timing).</li>
+          <li><strong>Instant Export:</strong> Download your session ZIP file with one click when done.</li>
+        </ul>
       </div>
-      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+        <button class="btn-secondary" onclick="exportPilotDemoZip()" style="font-size: 0.85rem;">تصدير عينة تجريبية (Pilot Test ZIP)</button>
         <button class="btn-primary" style="padding: 0.75rem 1.5rem; font-size: 1rem;" onclick="acceptConsent()">أوافق وأبدأ الكتابة (Agree &amp; Begin)</button>
       </div>
     </div>
   </div>
 
   <div class="header">
-    <div class="title">استوديو حافظ للخط القرآني (البروتوكول القصير)</div>
+    <div class="title">استوديو حافظ للخط القرآني (البروتوكول القصير) / Hafiz Capture Studio</div>
     <div style="display: flex; gap: 0.5rem; align-items: center;">
       <span class="badge" id="writerBadge">المعرف: جاري التحميل...</span>
       <div class="display-switch">
@@ -248,16 +254,31 @@
 
   <div class="stats-card">
     <div>
-      <div>العينات المحفوظة</div>
+      <div>العينات المحفوظة / Saved</div>
       <div class="stat-val" id="savedCount">0 / 40</div>
     </div>
     <div>
-      <div>الوقت المقدر</div>
+      <div>الوقت المقدر / Est. Time</div>
       <div class="stat-val">10–12 دقيقة</div>
     </div>
     <div>
-      <div>تغطية الحروف</div>
+      <div>تغطية الحروف / Balance</div>
       <div class="stat-val">100% متوازنة + لفظ الجلالة</div>
+    </div>
+  </div>
+
+  <!-- Bilingual Volunteer Instructions Accordion/Card -->
+  <div class="stats-card" style="margin-top: 0.75rem; text-align: right; display: block; line-height: 1.6;">
+    <div style="font-weight: 700; color: var(--primary); margin-bottom: 0.25rem;">تعليمات الكتابة للمتطوعين / Volunteer Instructions</div>
+    <div style="font-size: 0.85rem; color: #cbd5e1;">
+      <strong>1. القلم والراحة (Stylus & Ergonomics):</strong> يُفضّل استخدام قلم إلكتروني (Apple Pencil / S-Pen) على جهاز لوحي. اكتب بخطك الطبيعي المعتاد.<br>
+      <em>Write naturally using an active tablet stylus.</em><br>
+      <strong>2. خط الأساس (Ruled Baseline):</strong> اجعل حروف الكلمات مستقرة على خط الأساس الأزرق وداخل النطاق المسطر.<br>
+      <em>Align text comfortably along the blue baseline within the ruled band.</em><br>
+      <strong>3. التشكيل (Diacritics):</strong> التشكيل اختياري تماماً؛ الكتابة بالرسم المجرد مقبولة وصحيحة 100%.<br>
+      <em>Diacritical marks (Tashkeel) are optional; unvowelled rasm is fully valid.</em><br>
+      <strong>4. الحفظ والتصدير (Save & Export):</strong> اضغط "حفظ والتالي" بعد كتابة كل عينة. عند إكمال الـ 40 عينة، اضغط "تصدير الحزمة" لتنزيل ملف الـ ZIP.<br>
+      <em>Click 'Save & Next' after each prompt. Click 'Download ZIP' upon completion to download your file.</em>
     </div>
   </div>
 
@@ -974,6 +995,34 @@
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       return bytes;
+    }
+
+    function exportPilotDemoZip() {
+      const files = [];
+      const pilotId = `${anonWriterId}_pilot_01`;
+      const csv = `sample_id,image_file,mode,transcription,writer_id,capture_version,band_top_css,band_base_css,band_bot_css,canvas_w_css,canvas_h_css,dpr\n${pilotId},${pilotId}.png,line,"وقيل يا أرض ابلعي",${anonWriterId},v2,72,147,180,960,240,1.5\n`;
+      files.push({ name: 'manifest.csv', data: new TextEncoder().encode(csv) });
+      const strokesData = [{
+        id: pilotId,
+        text: "وقيل يا أرض ابلعي",
+        capture_version: 'v2',
+        geometry: { band_top_css: 72, band_base_css: 147, band_bot_css: 180, canvas_w_css: 960, canvas_h_css: 240, dpr: 1.5 },
+        strokes: [
+          [{ x: 100, y: 140, p: 0.5, t: Date.now() }, { x: 120, y: 145, p: 0.5, t: Date.now() + 50 }]
+        ]
+      }];
+      files.push({ name: 'strokes.json', data: new TextEncoder().encode(JSON.stringify(strokesData, null, 2)) });
+      const dataUrl = canvas.toDataURL('image/png');
+      files.push({ name: `${pilotId}.png`, data: dataUrlToUint8(dataUrl) });
+
+      const zipBlob = createStoredZip(files);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = `hafiz_pilot_demo_${anonWriterId}_${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      alert('تم تنزيل حزمة العينة التجريبية (Pilot Test ZIP) بنجاح!');
     }
 
     function exportCapturedDataset() {

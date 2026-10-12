@@ -2,6 +2,8 @@
 
 A high-performance CRNN + CTC pipeline for Arabic Handwritten Text Recognition, specializing in Quranic Ayah text while preserving general-domain Arabic handwriting capability.
 
+> **Full Documentation**: See [docs/index.md](file:///c:/Users/mosa/OneDrive/Desktop/Hafiz/quran_htr/docs/index.md) for the complete engineering knowledge base, inference contracts, writer benchmarks, numbers, decisions, and tooling guides.
+
 ---
 
 ## 1. Overview & Architecture
