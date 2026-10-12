@@ -6,6 +6,11 @@ This document records architectural decisions, dated policy changes, and explici
 
 ## 1. Dated Retractions & Corrected Misconceptions
 
+### [2026-10-12] Retraction: 'Catastrophic Forgetting' Diagnosis on Folds A, B, C Was a Silent Weight Loading Bug
+- **Prior Claim (Task 2.22)**: Stated that fine-tuning on small stroke batches (60-119 samples) down to loss ~0.02 caused catastrophic forgetting / loss of general HTR representation, blowing up held-out CER to ~100%.
+- **Retraction Reason**: The checkpoint `best.pt` stored model parameters under dictionary key `'model'`, whereas `scripts/train_twofold_lowo.py` queried `ckpt.get('model_state', ckpt)`. Because `model.load_state_dict(..., strict=False)` ran with `strict=False`, 0/65 tensors were matched. The model was trained from completely random uninitialized weights from epoch 1 (initial CTC loss 3.32 vs 0.89 for pre-trained weights), memorizing 80 samples and outputting random garbage on test samples.
+- **Corrected Status**: Marked **INVALID**. Fixed checkpoint loading, added `init_weights matched N/M tensors` assertion, and instituted a mandatory Step-0 gate aborting training if pre-train evaluation fails to match known baseline within 1 pt.
+
 ### [2026-10-12] Retraction: Initial Self-Calibration Claim ("Fine-Tuning Mandatory") Was Based on an Invalid Sweep
 - **Prior Claim (Task 2.21)**: Stated that self-calibrating thresholds from writer_02's first 20 samples caused corruption detection to collapse to $64.8\%$, "proving that fine-tuning is mandatory."
 - **Retraction Reason**: The initial sweep unconstrained percentiles produced $t_{\text{accept}} = -2.9919$ and $t_{\text{wrong}} = -1.4860$. Because $t_{\text{accept}} < t_{\text{wrong}}$, the decision policy was **MATHEMATICALLY INVALID** (the UNCERTAIN interval was inverted, creating simultaneous accept/reject conflicts).

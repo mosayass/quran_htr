@@ -34,6 +34,8 @@ data/*
 !data/capture/strokes.json
 !data/capture_v2/
 !data/capture_v2/**
+!data/locked_test/
+!data/locked_test/**
 
 manifests/
 tiny_khatt/

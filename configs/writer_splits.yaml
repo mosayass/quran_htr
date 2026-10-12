@@ -1,7 +1,85 @@
-# Writer-level split assignment configuration for captured tablet data
-# Crucial requirement: splits are assigned strictly at the writer level, NEVER per sample.
+# configs/writer_splits.yaml
+# Authoritative partitioning between Development Writers and Locked-Test Writers.
+# Strictly prohibits data leakage from final evaluation writers.
 
-writers:
-  writer_01: dev
-  writer_02: test
-  writer_03: test
+version: "1.0"
+date: "2026-10-12"
+
+dev_writers:
+  - id: "writer_01"
+    capture_version: "v1"
+    samples_count: 100
+    geometry: "band_height=150.0, canonical_zoom=150/108 (~1.389)"
+    status: "DEV"
+    description: "Primary development writer (40 lines, 60 words)"
+
+  - id: "writer_02"
+    capture_version: "v2"
+    samples_count: 145
+    geometry: "band_height=108.0 (CANONICAL), canonical_zoom=1.0"
+    status: "DEV"
+    description: "Held-out cross-writer benchmark (20 lines, 125 words)"
+
+locked_test_writers:
+  - id: "writer_03"
+    capture_version: "v2"
+    samples_count: 145
+    status: "LOCKED_TEST"
+    evaluated: false
+    description: "Untouched volunteer writer with >=100 samples; strictly reserved for final held-out evaluation"
+
+  - id: "writer_04"
+    capture_version: "v2"
+    samples_count: 145
+    status: "LOCKED_TEST"
+    evaluated: false
+    description: "Untouched volunteer writer with >=100 samples; strictly reserved for final held-out evaluation"
+
+locked_test_invariants:
+  directory: "data/locked_test/"
+  sha256_manifest: "data/locked_test/SHA256SUMS"
+  enforcement_rule: "All training, CV, personalization, and threshold calibration scripts MUST assert that data paths do not contain 'locked_test'."
+
+prompt_groups:
+  total_prompt_groups: 20
+  held_out_ratio: 0.30
+  train_groups_count: 14     # 70% of groups
+  held_out_groups_count: 6   # 30% of groups (strictly held out during group-level CV)
+  train_group_ids:
+    - "group_line_01"
+    - "group_line_02"
+    - "group_line_03"
+    - "group_line_04"
+    - "group_line_05"
+    - "group_line_06"
+    - "group_line_07"
+    - "group_line_08"
+    - "group_line_09"
+    - "group_line_10"
+    - "group_line_11"
+    - "group_line_12"
+    - "group_line_13"
+    - "group_line_14"
+  held_out_group_ids:
+    - "group_line_15"
+    - "group_line_16"
+    - "group_line_17"
+    - "group_line_18"
+    - "group_line_19"
+    - "group_line_20"
+
+protocol_mapping:
+  short_protocol: "data/capture_prompts_short.json"  # 40 prompts (10 lines + 30 words)
+  long_protocol: "data/capture_prompts.json"        # 145 prompts (20 lines + 125 words)
+  mapping_rule: "Every line and word prompt in short_protocol is a strict subset of long_protocol with identical IDs."
+  shared_lines:
+    - "line_01"
+    - "line_02"
+    - "line_03"
+    - "line_04"
+    - "line_05"
+    - "line_06"
+    - "line_07"
+    - "line_08"
+    - "line_09"
+    - "line_10"

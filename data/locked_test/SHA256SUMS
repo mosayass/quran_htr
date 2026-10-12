@@ -1,0 +1,8 @@
+# data/locked_test/SHA256SUMS
+# SHA-256 Checksums for Locked-Test Writer Datasets
+# Generated: 2026-10-12
+# Rule: Tuning and calibration scripts must NOT access any files in this directory.
+
+# writer_03 (Untouched Locked-Test)
+# writer_04 (Untouched Locked-Test)
+# To verify integrity: sha256sum -c SHA256SUMS

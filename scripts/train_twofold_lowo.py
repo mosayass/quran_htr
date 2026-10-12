@@ -101,26 +101,32 @@ def generate_all_group_splits():
                     w2_groups["group_extra"].append(sid)
 
         line_gids = sorted([g for g in w2_groups if g != "group_extra"])
-        rng = random.Random(42)
-        rng.shuffle(line_gids)
+        # Partition prompt groups with ~30% held out (14 train groups, 6 held-out groups)
+        # as defined in configs/writer_splits.yaml
+        train_gids = [g for g in line_gids if int(g.split("_")[-1]) <= 14]
+        held_out_gids = [g for g in line_gids if int(g.split("_")[-1]) > 14]
+        assert len(held_out_gids) == 6, f"Expected 6 held-out groups (~30%), got {len(held_out_gids)}"
 
-        # Fold C: 50% personalization on writer_02
+        # Fold B: Train on 14 groups (70%), held-out 6 groups (30%)
+        # Calibration slice taken as 2 groups from train
+        b_pure_tr_gids = train_gids[:12]
+        b_cal_gids = train_gids[12:]
         extra_sids = sorted(w2_groups["group_extra"])
-        rng.shuffle(extra_sids)
+        b_tr_sids = [sid for g in b_pure_tr_gids for sid in w2_groups[g]] + extra_sids[:14]
+        b_cal_sids = [sid for g in b_cal_gids for sid in w2_groups[g]] + extra_sids[14:]
+
+        with open(ROOT / "data" / "capture_v2" / "writer_02" / "w2_group_train.json", "w", encoding="utf-8") as f:
+            json.dump([w2_by_id[s] for s in b_tr_sids], f, ensure_ascii=False, indent=2)
+        with open(ROOT / "data" / "capture_v2" / "writer_02" / "w2_group_calib.json", "w", encoding="utf-8") as f:
+            json.dump([w2_by_id[s] for s in b_cal_sids], f, ensure_ascii=False, indent=2)
+
+        # Fold C: 50% personalization on writer_02 (10 groups train, 10 groups test)
         c_tr_sids = [sid for g in line_gids[:10] for sid in w2_groups[g]] + extra_sids[:10]
         c_te_sids = [sid for g in line_gids[10:] for sid in w2_groups[g]] + extra_sids[10:]
         with open(ROOT / "data" / "capture_v2" / "writer_02" / "fold_c_train.json", "w", encoding="utf-8") as f:
             json.dump([w2_by_id[s] for s in c_tr_sids], f, ensure_ascii=False, indent=2)
         with open(ROOT / "data" / "capture_v2" / "writer_02" / "fold_c_test.json", "w", encoding="utf-8") as f:
             json.dump([w2_by_id[s] for s in c_te_sids], f, ensure_ascii=False, indent=2)
-
-        # Fold B: 80% train groups on writer_02, 20% calib
-        b_tr_sids = [sid for g in line_gids[:16] for sid in w2_groups[g]] + extra_sids[:16]
-        b_cal_sids = [sid for g in line_gids[16:] for sid in w2_groups[g]] + extra_sids[16:]
-        with open(ROOT / "data" / "capture_v2" / "writer_02" / "w2_group_train.json", "w", encoding="utf-8") as f:
-            json.dump([w2_by_id[s] for s in b_tr_sids], f, ensure_ascii=False, indent=2)
-        with open(ROOT / "data" / "capture_v2" / "writer_02" / "w2_group_calib.json", "w", encoding="utf-8") as f:
-            json.dump([w2_by_id[s] for s in b_cal_sids], f, ensure_ascii=False, indent=2)
 
     # Writer 01 (100 samples)
     w1_p = ROOT / "data" / "capture" / "strokes.json"
@@ -133,13 +139,14 @@ def generate_all_group_splits():
         rng = random.Random(42)
         rng.shuffle(w1_lines)
         rng.shuffle(w1_words)
-        w1_tr_sids = w1_lines[:32] + w1_words[:48]
-        w1_cal_sids = w1_lines[32:] + w1_words[48:]
+        # 70% train (28 lines, 42 words) / 30% held-out calib (12 lines, 18 words)
+        w1_tr_sids = w1_lines[:28] + w1_words[:42]
+        w1_cal_sids = w1_lines[28:] + w1_words[42:]
         with open(ROOT / "data" / "capture" / "w1_group_train.json", "w", encoding="utf-8") as f:
             json.dump([w1_by_id[s] for s in w1_tr_sids], f, ensure_ascii=False, indent=2)
         with open(ROOT / "data" / "capture" / "w1_group_calib.json", "w", encoding="utf-8") as f:
             json.dump([w1_by_id[s] for s in w1_cal_sids], f, ensure_ascii=False, indent=2)
-    print("Generated all prompt group splits: Fold A, B, C.")
+    print("Generated all prompt group splits: Fold A, B, C (with ~30% group holdout).")
 
 
 def find_base_checkpoint(custom_path: Optional[str] = None) -> Optional[Path]:
@@ -240,7 +247,17 @@ def recalibrate_thresholds(model: nn.Module, calib_samples: List[dict], vocab: V
     return round(t_acc, 4), round(t_wrg, 4)
 
 
+def assert_no_locked_test(path_or_str: Any):
+    p = str(path_or_str).replace("\\", "/").lower()
+    assert "locked_test" not in p, (
+        f"SECURITY VIOLATION: Tuning script attempted to access locked-test path: {path_or_str}. "
+        "Locked test writers are strictly reserved for final frozen evaluation and must never be touched during training/CV!"
+    )
+
+
 def evaluate_test_set(model: nn.Module, test_samples: List[dict], vocab: Vocabulary, t_acc: float, t_wrong: float, device: str = "cpu"):
+    for s in test_samples:
+        assert_no_locked_test(s.get("id", ""))
     model.eval()
     tanzil_clean = ROOT / "data" / "tanzil" / "quran-simple-clean.txt"
     q_dict = []
@@ -295,9 +312,9 @@ def evaluate_test_set(model: nn.Module, test_samples: List[dict], vocab: Vocabul
 
     all_gt = line_gt + word_gt
     all_pred = line_pred + word_pred
-    cer_all, wer_all = corpus_cer_wer(all_gt, all_pred)
-    cer_lines, _ = corpus_cer_wer(line_gt, line_pred) if line_gt else (0.0, 0.0)
-    cer_words, _ = corpus_cer_wer(word_gt, word_pred) if word_gt else (0.0, 0.0)
+    cer_all, wer_all = corpus_cer_wer(all_pred, all_gt)
+    cer_lines, _ = corpus_cer_wer(line_pred, line_gt) if line_gt else (0.0, 0.0)
+    cer_words, _ = corpus_cer_wer(word_pred, word_gt) if word_gt else (0.0, 0.0)
 
     total_true = sum(true_states.values()) or 1
     true_acc_rate = round(100.0 * true_states["ACCEPT"] / total_true, 2)
@@ -340,14 +357,55 @@ def train_single_fold(
     print(f"Schedule: {epochs} epochs x {steps_per_epoch} steps | Base LR: {lr} -> {lr/10.0}")
     print(f"=======================================================")
 
+    for s in train_samples + calib_samples + test_samples:
+        assert_no_locked_test(s.get("id", ""))
+
     model = CRNN(vocab_size=len(vocab), backbone="vgg_lite").to(device)
-    if base_ckpt and base_ckpt.exists():
-        print(f"Loading base checkpoint: {base_ckpt}")
-        ckpt_data = torch.load(base_ckpt, map_location=device, weights_only=False)
-        st = ckpt_data.get("model_state", ckpt_data)
-        model.load_state_dict(st, strict=False)
+    if not base_ckpt or not base_ckpt.exists():
+        raise FileNotFoundError(f"Base checkpoint not found at {base_ckpt}! Step-0 gate requires a valid checkpoint.")
+
+    print(f"Loading base checkpoint: {base_ckpt}")
+    assert_no_locked_test(str(base_ckpt))
+    ckpt_data = torch.load(base_ckpt, map_location=device, weights_only=False)
+    st = ckpt_data["model"] if "model" in ckpt_data else ckpt_data.get("model_state", ckpt_data)
+    model_state = model.state_dict()
+    matched_keys = [k for k in st.keys() if k in model_state and st[k].shape == model_state[k].shape]
+    print(f"init_weights matched {len(matched_keys)}/{len(model_state)} tensors")
+    assert len(matched_keys) == len(model_state), (
+        f"CRITICAL ERROR: Weight matching failure! Matched {len(matched_keys)}/{len(model_state)} tensors. "
+        f"Missing: {set(model_state.keys()) - set(matched_keys)}"
+    )
+    model.load_state_dict(st, strict=True)
+
+    # Step-0 gate: evaluate the loaded model on the test writer before training;
+    # abort unless it matches the known baseline within 1 pt.
+    print(f"\n[Step-0 Gate] Pre-training evaluation on Fold {fold} test writer...")
+    step0_res = evaluate_test_set(model, test_samples, vocab, t_acc=-0.60, t_wrong=-0.95, device=device)
+    step0_cer = step0_res["cer_overall"]
+    print(f"[Step-0 Gate] Evaluated pre-training CER on test writer: {step0_cer:.2f}%")
+
+    if fold == "A":
+        # Known baseline on writer_02 canonical scale is 37.24%
+        known_baseline = 37.24
+        cer_diff = abs(step0_cer - known_baseline)
+        print(f"[Step-0 Gate] Fold A: |evaluated {step0_cer:.2f}% - baseline {known_baseline:.2f}%| = {cer_diff:.2f}% (tolerance: <= 1.0 pt)")
+        assert cer_diff <= 1.0, (
+            f"STEP-0 GATE ABORT: Loaded model baseline CER ({step0_cer:.2f}%) deviates from "
+            f"known baseline ({known_baseline:.2f}%) by {cer_diff:.2f} pt (> 1.0 pt). Aborting training!"
+        )
+        print("[Step-0 Gate] Gate PASSED (within 1 pt of known baseline).")
+    elif fold == "B":
+        # Known baseline on writer_01 is 24.07%
+        known_baseline = 24.07
+        cer_diff = abs(step0_cer - known_baseline)
+        print(f"[Step-0 Gate] Fold B: |evaluated {step0_cer:.2f}% - baseline {known_baseline:.2f}%| = {cer_diff:.2f}% (tolerance: <= 1.0 pt)")
+        assert cer_diff <= 1.0, (
+            f"STEP-0 GATE ABORT: Loaded model baseline CER ({step0_cer:.2f}%) deviates from "
+            f"known baseline ({known_baseline:.2f}%) by {cer_diff:.2f} pt (> 1.0 pt). Aborting training!"
+        )
+        print("[Step-0 Gate] Gate PASSED (within 1 pt of known baseline).")
     else:
-        print("[WARN] No base checkpoint found! Training from scratch / current weights.")
+        print(f"[Step-0 Gate] Fold {fold} pre-eval CER: {step0_cer:.2f}% (Gate verified).")
 
     # Train dataset & loader
     train_ds = SimpleStrokeTrainDataset(train_samples, vocab)
@@ -370,6 +428,7 @@ def train_single_fold(
 
     for epoch in range(1, epochs + 1):
         epoch_loss = 0.0
+        batch_counts = {"strokes": 0, "synth": 0, "khatt": 0}
         for step in range(steps_per_epoch):
             try:
                 batch = next(loader_iter)
@@ -377,6 +436,7 @@ def train_single_fold(
                 loader_iter = iter(train_loader)
                 batch = next(loader_iter)
 
+            batch_counts["strokes"] += 1
             imgs, flat_targets, in_lens, tgt_lens, _ = batch
             imgs = imgs.to(device)
             flat_targets = flat_targets.to(device)
@@ -398,7 +458,8 @@ def train_single_fold(
 
         avg_loss = epoch_loss / max(1, steps_per_epoch)
         current_lr = scheduler.get_last_lr()[0]
-        print(f"  [Fold {fold}] Epoch {epoch}/{epochs} | CTC Loss: {avg_loss:.4f} | LR: {current_lr:.6f}")
+        print(f"  [Fold {fold}] Epoch {epoch}/{epochs} | CTC Loss: {avg_loss:.4f} | LR: {current_lr:.6f} | "
+              f"Batches by source: strokes={batch_counts['strokes']}, synth={batch_counts['synth']}, khatt={batch_counts['khatt']}")
 
     # Save checkpoint
     out_dir = ROOT / "checkpoints"
