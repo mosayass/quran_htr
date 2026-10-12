@@ -53,3 +53,16 @@ This document serves as the single source of truth for all reported empirical me
 | **1.15x** | 43.43% | 37.19% | 49.54% | 95.65% | Diagnostic sweep |
 | **1.30x** | 48.78% | 41.37% | 56.03% | 97.39% | Diagnostic sweep |
 | **1.40x** | 53.66% | 44.02% | 63.08% | 101.30% | RETRACTED (Double-count/clipping) |
+
+---
+
+## 3. Cross-Writer Fine-Tuning & Personalization Matrix (Folds A, B, C)
+
+> **Empirical Finding**: Fine-tuning exclusively on small stroke batches (60–119 samples) down to near-zero training loss (0.013–0.025) without anchor regularization (synth + KHATT shards) induces catastrophic forgetting/overfitting on unseen lexical test sets (CER ~100%).
+
+| Protocol / Fold | Train Split | Test Split | Train Epochs & Loss | Calibrated Thresholds ($t_{\text{acc}}, t_{\text{wrg}}$) | Lines CER | Words CER | Overall CER | True-Accept Rate | Dot Swap WRONG | Word Swap WRONG |
+| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Fold A (LOWO)** | `writer_01` (80 train, 20 calib) | `writer_02` (148 held-out) | 6 epochs ($3.32 \to 0.021$) | $-6.28, -6.48$ | 104.98% | 102.25% | **103.55%** | **88.61%** | 22.40% | 59.46% |
+| **Fold B (LOWO)** | `writer_02` (119 train, 26 calib) | `writer_01` (110 held-out) | 6 epochs ($3.25 \to 0.025$) | $-6.53, -6.73$ | 109.50% | 75.80% | **102.26%** | **84.40%** | 42.16% | 69.09% |
+| **Fold C (Personalized)** | `writer_02` (60 train, 15 calib) | `writer_02` (70 held-out) | 6 epochs ($3.04 \to 0.013$) | $-6.20, -6.40$ | 99.36% | 91.35% | **95.03%** | **83.04%** | 33.90% | 68.57% |
+
