@@ -579,7 +579,10 @@ def train_single_run(
     forgetting = {}
     if not args.skip_forgetting:
         for name, p in forget_paths.items():
-            forgetting[name] = eval_shard_cer(model, p, vocab, device, limit=args.forget_limit)
+            if p.exists():
+                forgetting[name] = eval_shard_cer(model, p, vocab, device, limit=args.forget_limit)
+            else:
+                forgetting[name] = None
     rec = {
         "fold": fold, "mix": mix_name, "weights": list(weights), "seed": seed, "lc_size": lc_size, "device": device,
         "epochs": args.epochs, "steps_per_epoch": args.steps_per_epoch, "batch_size": args.batch_size, "lr": args.lr,
@@ -636,8 +639,15 @@ def main():
     synth_ds = khatt_ds = None
     if need_anchor:
         from shards import ShardDataset
-        synth_ds = ShardDataset([ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.synth_shards], vocab, augment=True, label_order="visual")
-        khatt_ds = ShardDataset([ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.khatt_shards], vocab, augment=True, label_order="visual")
+        synth_files = [ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.synth_shards]
+        khatt_files = [ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.khatt_shards]
+        missing = [str(f) for f in synth_files + khatt_files if not f.exists()]
+        if missing:
+            raise FileNotFoundError(
+                f"Missing anchor shard(s) for mix training: {missing}. "
+                f"Ensure shards are synced to data/shards/ or run with '--mixes stroke_only'.")
+        synth_ds = ShardDataset(synth_files, vocab, augment=True, label_order="visual")
+        khatt_ds = ShardDataset(khatt_files, vocab, augment=True, label_order="visual")
         print(f"Anchor pools: synth={len(synth_ds)} khatt={len(khatt_ds)}")
     forget_paths = {}
     rp = lambda p: Path(p) if Path(p).is_absolute() else ROOT / p

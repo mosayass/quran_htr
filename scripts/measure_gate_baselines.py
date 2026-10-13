@@ -33,7 +33,7 @@ from train_twofold_lowo import (GATE_BASELINE_PATH, GATE_TOL, assert_no_locked_t
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--devices", nargs="+", default=["auto"], help="auto = every available device (cpu, cuda)")
+    ap.add_argument("--device", "--devices", dest="devices", nargs="+", default=["auto"], help="auto = every available device (cpu, cuda)")
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--base_checkpoint", default=None)
     ap.add_argument("--with_forgetting", action="store_true")
