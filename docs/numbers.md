@@ -58,11 +58,21 @@ This document serves as the single source of truth for all reported empirical me
 
 ## 3. Cross-Writer Fine-Tuning & Personalization Matrix (Folds A, B, C)
 
-> **STATUS: INVALID PENDING STEP-0 GATED RERUN (Task 2.23)**
-> 
-> **Root Cause Identified**: The catastrophic forgetting / regularization deficit hypothesis is **RETRACTED**. The observed ~100% CER failure across Folds A, B, and C was caused by a silent weight loading bug in `train_twofold_lowo.py`: `best.pt` stored model weights under dictionary key `'model'`, whereas the script queried `ckpt.get('model_state', ckpt)`. With `strict=False`, 0/65 tensors matched and PyTorch silently trained from uninitialized random weights (initial loss 3.32 vs 0.89 for pre-trained weights), memorizing 80 training samples while producing random junk on evaluation.
-> 
-> All metrics below are **INVALID** and pending replacement by the Step-0 gated CV execution.
+> **Root cause of the earlier ~100% CER**: weight-loading bug (`'model'` vs `'model_state'` key, `strict=False`, 0 tensors loaded). The "catastrophic forgetting" explanation is RETRACTED.
+
+### 3a. Valid run (2026-10-13, Colab CUDA, `step2b_v3/best.pt`, `init_weights matched 74/74`, Step-0 gate passed)
+
+Provenance: single run per fold, no seeds/variance. Training data is **strokes only** (synth=0, khatt=0 batches; no anchor mix). Thresholds recalibrated on a slice of the *training* writer (mechanical `t_wrong = t_accept - 0.20`). Detection rates are paired with True-Accept.
+
+| Fold | Train → Test | Step-0 CER (pre) | Final Lines / Words / Overall CER | Δ Overall | True-Accept | Dot-Swap WRONG | Word-Swap WRONG | Thresholds (acc, wrg) | Final train loss |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **A** | w01 (70) → w02 (145, cross-writer) | 36.30% | 28.65 / 30.61 / **29.64%** | **−6.66** | 89.57% | 51.64% | 100.0% | −3.5686, −3.7686 | 0.0007 |
+| **B** | w02 (82) → w01 (100, cross-writer) | 24.77% | 27.45 / 20.45 / **26.01%** | **+1.24 (worse)** | 88.10% | 50.00% | 100.0% | −3.6752, −3.8752 | 0.0020 |
+| **C** | w02 (56) → w02 (76 held-out groups, personalization) | 38.57% | 23.11 / 25.68 / **24.46%** | **−14.11** | 91.45% | 54.69% | 98.68% | −2.8919, −3.0919 | 0.0003 |
+
+Caveats: (1) Fold C step-0 has no independent known baseline (gate is vacuous there). (2) Gate tolerances: Fold A uses a CUDA baseline (36.15%) taken from the earlier failing run's pre-eval; Fold B tolerance was widened to 1.5 pt (spec said 1.0). (3) Train loss collapses to ~0.001 on 56-82 samples (memorization); gains are real on held-out samples but fragile. (4) Lexical overlap between train and test prompts not yet audited. (5) Dot-swap rejection (~50%) is *lower* than the frozen-w01-threshold figure (91.0% at 41.3% true-accept) but at a different operating point; not comparable.
+
+### 3b. Superseded INVALID rows (uninitialized-weight run)
 
 | Protocol / Fold | Train Split | Test Split | Train Epochs & Loss | Calibrated Thresholds ($t_{\text{acc}}, t_{\text{wrg}}$) | Lines CER | Words CER | Overall CER | True-Accept Rate | Dot Swap WRONG | Word Swap WRONG | Status |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |

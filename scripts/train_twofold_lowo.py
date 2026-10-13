@@ -7,7 +7,8 @@ Two-fold & Three-fold (Folds A, B, C) cross-writer fine-tune & personalization p
 - Fold A: train writer_01 (80% groups) -> test writer_02 (145 samples)
 - Fold B: train writer_02 (80% groups) -> test writer_01 (100 samples)
 - Fold C: personalization on writer_02 (train 50% of groups, test remaining 50%)
-- Mix: 0.5 strokes / 0.3 synth v3 / 0.2 KHATT (or fallback if shards not downloaded)
+- Data: STROKES ONLY (synth/KHATT anchor mix of 0.5/0.3/0.2 is NOT implemented; per-epoch
+  batch counts log synth=0, khatt=0)
 - AdamW, cosine annealing lr (5e-5 -> 5e-6), fixed 6 epochs
 - Thresholds recalibrated on 20% slice of training writer (monotonic t_wrong <= t_accept)
 - Evaluates CER, closed-set rank, and 3-state outcomes
