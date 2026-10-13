@@ -81,16 +81,24 @@ Evaluated across all test sets:
 
 ## 4. Key Checkpoints & Shards Locations
 
-- **Local Checkpoints** (`checkpoints/`):
-  - `checkpoints/best.pt` & `best_real.pt` (Original 8-epoch checkpoints, DO NOT OVERWRITE).
-  - `checkpoints/cont_best.pt` & `cont_best_real.pt` & `cont_last.pt` (Continuation training checkpoints from Colab).
-- **Drive Checkpoints**:
-  - `/content/drive/MyDrive/quran_htr_writer_checkpoints/run_visual/`
-- **Dist Shards Zips** (on Drive `/content/drive/MyDrive/quran_htr/dist/`):
+- **Canonical Base Checkpoint (`best.pt`, Step 2b v3, 74 tensors)**:
+  - Google Drive Primary: `/content/drive/MyDrive/quran_htr_writer_checkpoints/step2b_v3/best.pt`
+  - Google Drive Root Backup: `/content/drive/MyDrive/quran_htr_writer_checkpoints/best.pt`
+  - Local Path: `checkpoints/best.pt`
+- **Trained LOWO Run Database**:
+  - Google Drive: `/content/drive/MyDrive/quran_htr_writer_checkpoints/lowo_runs.jsonl`
+  - Local Path: `reports/lowo_runs.jsonl`
+- **Other Checkpoints**:
+  - Visual-Order Continuation: `/content/drive/MyDrive/quran_htr_writer_checkpoints/run_visual/best.pt`
+  - Baseline Backups: `checkpoints/best.pt` & `best_real.pt` (Original 8-epoch, DO NOT OVERWRITE).
+- **Dist Shards Zips** (on Drive `/content/drive/MyDrive/quran_htr/dist/` or `/content/drive/MyDrive/`):
+  - `shards_synth.zip` (Synthetic Quran train, val, and test shards)
+  - `shards_khatt.zip` (KHATT train, val, and test shards)
   - `shards_corpus_v3.zip` (404.3 MB, 66k lines)
   - `shards_wordmix.zip` (25.5 MB, 3k lines)
-  - `shards_synth.zip` (v2 synth shards)
-  - `shards_khatt.zip` (KHATT train & val shards)
+- **Loose Shards Directory on Drive**:
+  - `/content/drive/MyDrive/quran_htr_data/` (or `/content/drive/MyDrive/quran_htr/data/shards/`)
+
 
 ---
 
