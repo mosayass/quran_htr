@@ -1,0 +1,21 @@
+{
+  "Fold_A": {
+    "cer_overall": 36.96,
+    "cer_lines": 33.02,
+    "cer_words": 40.82,
+    "wer_overall": 86.52,
+    "true_accept_rate": 90.43,
+    "true_unc_rate": 1.74,
+    "true_wrg_rate": 7.83,
+    "corr_rejection": {
+      "dot_swap": 36.07,
+      "del_ins": 29.66,
+      "word_swap": 97.93,
+      "adj_swap": 100.0,
+      "skip_word": 95.0,
+      "mutashabih": 97.93
+    },
+    "t_accept": -2.6838,
+    "t_wrong": -2.8838
+  }
+}

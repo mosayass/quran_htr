@@ -1,0 +1,52 @@
+{
+  "checkpoint": "best.pt",
+  "device": "cpu",
+  "writers": {
+    "writer_01": {
+      "n": 100,
+      "scale_policy": {
+        "band_height": 150.0,
+        "h_ink_median": 78.193359375,
+        "h_ink_max": 179.45184326171875,
+        "S_target": 1.438741101536156,
+        "S_formula58": 0.757515205913734,
+        "S_clip_exact": 0.6152330001407857,
+        "S_w": 0.6152330001407857
+      },
+      "canonical_zoom": 1.3888888888888888,
+      "cer": {
+        "baseline": 25.62,
+        "adabn": 34.81,
+        "scale": 47.9,
+        "scale+adabn": 64.8
+      },
+      "clipped_samples": {
+        "canonical": 42,
+        "normalized": 0
+      }
+    },
+    "writer_02": {
+      "n": 145,
+      "scale_policy": {
+        "band_height": 108.0,
+        "h_ink_median": 92.92514038085938,
+        "h_ink_max": 186.31771850585938,
+        "S_target": 0.8716693853570362,
+        "S_formula58": 0.5253123577558299,
+        "S_clip_exact": 0.3620786165284675,
+        "S_w": 0.3620786165284675
+      },
+      "canonical_zoom": 1.0,
+      "cer": {
+        "baseline": 37.24,
+        "adabn": 44.93,
+        "scale": 54.6,
+        "scale+adabn": 69.89
+      },
+      "clipped_samples": {
+        "canonical": 80,
+        "normalized": 0
+      }
+    }
+  }
+}

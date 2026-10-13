@@ -1,33 +1,39 @@
 """
 scripts/train_twofold_lowo.py
-Task 2.20 & 2.21 & 2.22:
-Two-fold & Three-fold (Folds A, B, C) cross-writer fine-tune & personalization pipeline:
-- Canonical zoom semantics: v2 = 1.0, v1 = 150/108 (~1.39), width = 2.2px (1.8-2.6px augment)
-- Prompt group splitting: a line and its paired words stay strictly together
-- Fold A: train writer_01 (80% groups) -> test writer_02 (145 samples)
-- Fold B: train writer_02 (80% groups) -> test writer_01 (100 samples)
-- Fold C: personalization on writer_02 (train 50% of groups, test remaining 50%)
-- Data: STROKES ONLY (synth/KHATT anchor mix of 0.5/0.3/0.2 is NOT implemented; per-epoch
-  batch counts log synth=0, khatt=0)
-- AdamW, cosine annealing lr (5e-5 -> 5e-6), fixed 6 epochs
-- Thresholds recalibrated on 20% slice of training writer (monotonic t_wrong <= t_accept)
-- Evaluates CER, closed-set rank, and 3-state outcomes
+Cross-writer fine-tune / personalization pipeline (dev writers only: writer_01, writer_02).
+
+Task 2.25 version:
+- Folds: A (w01 -> w02), B (w02 -> w01), C (personalization on w02, 50% groups),
+  CLC (Fold C learning curve: n in {10,20,40,75} train samples, tested on w02's held-out groups).
+- Data mixes (per-SAMPLE multinomial draws, strokes/synth/KHATT):
+    stroke_only = 1.0/0.0/0.0   mix_a = 0.5/0.3/0.2   mix_b = 0.3/0.4/0.3
+  Each epoch asserts nonzero synth AND khatt sample counts when the mix requires them.
+- Step-0 gate: the loaded model is evaluated on the fold's test subset BEFORE any optimizer step and
+  must match the INDEPENDENTLY measured same-device baseline in configs/gate_baselines.json within
+  1.0 pt (measure with scripts/measure_gate_baselines.py). Missing baseline => abort.
+- Weight loading asserts every state_dict entry matched ("init_weights matched N/M tensors").
+- Seeds: torch/numpy/random + DataLoader worker streams; results append to a JSONL file and runs
+  already present are skipped (Colab disconnect-safe).
+- Post-fine-tune forgetting evals: KHATT val CER and synthetic test CER (same loader as
+  evaluate_continuation.py).
+- Locked-test writers are never loadable: every path/id is checked by assert_no_locked_test().
 """
 
 from __future__ import annotations
 import argparse
-import csv
 import json
 import math
 import random
 import sys
+import time
 from pathlib import Path
 from collections import defaultdict
-from typing import List, Dict, Tuple, Optional, Any
+from typing import List, Dict, Tuple, Optional, Any, Sequence
+
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, IterableDataset, Dataset, Subset, get_worker_info
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -41,8 +47,35 @@ from render_strokes import render_strokes
 from verify_ref import verify_reference
 from task_2_17_suite import apply_corruption, extract_mutashabih_pairs
 
+GATE_TOL = 1.0  # percentage points, same device
+GATE_BASELINE_PATH = ROOT / "configs" / "gate_baselines.json"
+SOURCES = ("strokes", "synth", "khatt")
+MIXES: Dict[str, Tuple[float, float, float]] = {
+    "stroke_only": (1.0, 0.0, 0.0),
+    "mix_a": (0.5, 0.3, 0.2),
+    "mix_b": (0.3, 0.4, 0.3),
+}
+LC_SIZES = (10, 20, 40, 75)
 
-def get_canonical_zoom_and_render(s: dict, augment: bool = False, device: str = "cpu"):
+
+# ----------------------------------------------------------------------------------------------
+# Safety: locked-test refusal
+# ----------------------------------------------------------------------------------------------
+def assert_no_locked_test(path_or_str: Any):
+    p = str(path_or_str).replace("\\", "/").lower()
+    assert "locked_test" not in p, (
+        f"SECURITY VIOLATION: Tuning script attempted to access locked-test path: {path_or_str}. "
+        "Locked test writers are strictly reserved for final frozen evaluation and must never be touched during training/CV!"
+    )
+
+
+# ----------------------------------------------------------------------------------------------
+# Rendering
+# ----------------------------------------------------------------------------------------------
+def get_canonical_zoom_and_render(s: dict, augment: bool = False, device: str = "cpu",
+                                  zoom_override: Optional[float] = None):
+    """Renders one stroke sample to a (1,1,64,W) tensor. zoom_override (label-free scale policy)
+    replaces the canonical zoom when given (only for non-augmented evaluation)."""
     geom = s.get("geometry") or {}
     if geom:
         bt = float(geom.get("band_top_css", 0.0))
@@ -62,7 +95,7 @@ def get_canonical_zoom_and_render(s: dict, augment: bool = False, device: str = 
         z = canonical_zoom * random.uniform(0.8, 1.3)
         w = random.uniform(1.8, 2.6)
     else:
-        z = canonical_zoom
+        z = canonical_zoom if zoom_override is None else float(zoom_override)
         w = 2.2
 
     img = render_strokes(s["strokes"], zoom=z, width_after_zoom=w, center_y=render_cy, band_top_y=render_bt, band_height=bh, pad_x=16.0)
@@ -73,81 +106,99 @@ def get_canonical_zoom_and_render(s: dict, augment: bool = False, device: str = 
     return torch.from_numpy(arr).unsqueeze(0).unsqueeze(0).to(device)
 
 
-def generate_all_group_splits():
-    # 1. Load prompts mapping for writer_02
-    prompts_meta = {}
-    prompts_p = ROOT / "data" / "capture_prompts.json"
-    if prompts_p.exists():
-        with open(prompts_p, encoding="utf-8") as f:
-            prompts_meta = json.load(f)
-    w_to_line = {w["rasm"]: w["parent_line_id"] for w in prompts_meta.get("words", []) if "parent_line_id" in w}
+# ----------------------------------------------------------------------------------------------
+# Splits (prompt-group based; a line and its paired words stay together)
+# ----------------------------------------------------------------------------------------------
+def _dedup(samples: Sequence[dict]) -> List[dict]:
+    return list({x["id"]: x for x in samples if isinstance(x, dict) and "id" in x}.values())
 
-    # Writer 02
+
+def build_w2_groups() -> Tuple[Dict[str, dict], Dict[str, List[str]]]:
+    prompts_p = ROOT / "data" / "capture_prompts.json"
+    prompts_meta = json.load(open(prompts_p, encoding="utf-8")) if prompts_p.exists() else {}
+    w_to_line = {w["rasm"]: w["parent_line_id"] for w in prompts_meta.get("words", []) if "parent_line_id" in w}
+    w2_p = ROOT / "data" / "capture_v2" / "writer_02" / "strokes.json"
+    w2_by_id = {x["id"]: x for x in json.load(open(w2_p, encoding="utf-8")) if isinstance(x, dict) and "id" in x}
+    groups: Dict[str, List[str]] = defaultdict(list)
+    for sid, s in w2_by_id.items():
+        if "line" in sid:
+            groups[f"group_line_{int(sid.split('_')[-1]):02d}"].append(sid)
+        else:
+            p = w_to_line.get(s["text"])
+            if p:
+                groups[f"group_line_{int(p.split('_')[-1]):02d}"].append(sid)
+            else:
+                groups["group_extra"].append(sid)
+    return w2_by_id, groups
+
+
+def generate_all_group_splits():
     w2_p = ROOT / "data" / "capture_v2" / "writer_02" / "strokes.json"
     if w2_p.exists():
-        with open(w2_p, encoding="utf-8") as f:
-            w2_strokes = json.load(f)
-        w2_by_id = {x["id"]: x for x in w2_strokes if isinstance(x, dict) and "id" in x}
-        w2_groups = defaultdict(list)
-        for sid, s in w2_by_id.items():
-            if "line" in sid:
-                num = sid.split("_")[-1]
-                w2_groups[f"group_line_{int(num):02d}"].append(sid)
-            else:
-                txt = s["text"]
-                p = w_to_line.get(txt)
-                if p:
-                    w2_groups[f"group_line_{int(p.split('_')[-1]):02d}"].append(sid)
-                else:
-                    w2_groups["group_extra"].append(sid)
-
+        w2_by_id, w2_groups = build_w2_groups()
         line_gids = sorted([g for g in w2_groups if g != "group_extra"])
-        # Partition prompt groups with ~30% held out (14 train groups, 6 held-out groups)
-        # as defined in configs/writer_splits.yaml
         train_gids = [g for g in line_gids if int(g.split("_")[-1]) <= 14]
         held_out_gids = [g for g in line_gids if int(g.split("_")[-1]) > 14]
         assert len(held_out_gids) == 6, f"Expected 6 held-out groups (~30%), got {len(held_out_gids)}"
-
-        # Fold B: Train on 14 groups (70%), held-out 6 groups (30%)
-        # Calibration slice taken as 2 groups from train
-        b_pure_tr_gids = train_gids[:12]
-        b_cal_gids = train_gids[12:]
         extra_sids = sorted(w2_groups["group_extra"])
-        b_tr_sids = [sid for g in b_pure_tr_gids for sid in w2_groups[g]] + extra_sids[:14]
-        b_cal_sids = [sid for g in b_cal_gids for sid in w2_groups[g]] + extra_sids[14:]
 
-        with open(ROOT / "data" / "capture_v2" / "writer_02" / "w2_group_train.json", "w", encoding="utf-8") as f:
-            json.dump([w2_by_id[s] for s in b_tr_sids], f, ensure_ascii=False, indent=2)
-        with open(ROOT / "data" / "capture_v2" / "writer_02" / "w2_group_calib.json", "w", encoding="utf-8") as f:
-            json.dump([w2_by_id[s] for s in b_cal_sids], f, ensure_ascii=False, indent=2)
-
-        # Fold C: 50% personalization on writer_02 (10 groups train, 10 groups test)
+        b_tr_sids = [sid for g in train_gids[:12] for sid in w2_groups[g]] + extra_sids[:14]
+        b_cal_sids = [sid for g in train_gids[12:] for sid in w2_groups[g]] + extra_sids[14:]
+        held_sids = [sid for g in held_out_gids for sid in w2_groups[g]]
         c_tr_sids = [sid for g in line_gids[:10] for sid in w2_groups[g]] + extra_sids[:10]
         c_te_sids = [sid for g in line_gids[10:] for sid in w2_groups[g]] + extra_sids[10:]
-        with open(ROOT / "data" / "capture_v2" / "writer_02" / "fold_c_train.json", "w", encoding="utf-8") as f:
-            json.dump([w2_by_id[s] for s in c_tr_sids], f, ensure_ascii=False, indent=2)
-        with open(ROOT / "data" / "capture_v2" / "writer_02" / "fold_c_test.json", "w", encoding="utf-8") as f:
-            json.dump([w2_by_id[s] for s in c_te_sids], f, ensure_ascii=False, indent=2)
+        assert not (set(b_tr_sids + b_cal_sids) & set(held_sids)), "held-out groups leaked into train pool"
 
-    # Writer 01 (100 samples)
+        d = ROOT / "data" / "capture_v2" / "writer_02"
+        for name, sids in (("w2_group_train.json", b_tr_sids), ("w2_group_calib.json", b_cal_sids),
+                           ("w2_group_heldout.json", held_sids),
+                           ("fold_c_train.json", c_tr_sids), ("fold_c_test.json", c_te_sids)):
+            with open(d / name, "w", encoding="utf-8") as f:
+                json.dump([w2_by_id[s] for s in sids], f, ensure_ascii=False, indent=2)
+
     w1_p = ROOT / "data" / "capture" / "strokes.json"
     if w1_p.exists():
-        with open(w1_p, encoding="utf-8") as f:
-            w1_strokes = json.load(f)
-        w1_by_id = {x["id"]: x for x in w1_strokes if isinstance(x, dict) and "id" in x}
-        w1_lines = sorted([x for x in w1_by_id.keys() if "line" in x])
-        w1_words = sorted([x for x in w1_by_id.keys() if "word" in x])
+        w1_by_id = {x["id"]: x for x in json.load(open(w1_p, encoding="utf-8")) if isinstance(x, dict) and "id" in x}
+        w1_lines = sorted([x for x in w1_by_id if "line" in x])
+        w1_words = sorted([x for x in w1_by_id if "word" in x])
         rng = random.Random(42)
         rng.shuffle(w1_lines)
         rng.shuffle(w1_words)
-        # 70% train (28 lines, 42 words) / 30% held-out calib (12 lines, 18 words)
         w1_tr_sids = w1_lines[:28] + w1_words[:42]
         w1_cal_sids = w1_lines[28:] + w1_words[42:]
         with open(ROOT / "data" / "capture" / "w1_group_train.json", "w", encoding="utf-8") as f:
             json.dump([w1_by_id[s] for s in w1_tr_sids], f, ensure_ascii=False, indent=2)
         with open(ROOT / "data" / "capture" / "w1_group_calib.json", "w", encoding="utf-8") as f:
             json.dump([w1_by_id[s] for s in w1_cal_sids], f, ensure_ascii=False, indent=2)
-    print("Generated all prompt group splits: Fold A, B, C (with ~30% group holdout).")
+    print("Generated all prompt group splits: Fold A, B, C (+ w2 held-out groups for the learning curve).")
+
+
+def load_dev_splits() -> Dict[str, List[dict]]:
+    c = ROOT / "data" / "capture"
+    c2 = ROOT / "data" / "capture_v2" / "writer_02"
+    j = lambda p: json.load(open(p, encoding="utf-8"))
+    s = {
+        "w1_tr": j(c / "w1_group_train.json"), "w1_cal": j(c / "w1_group_calib.json"),
+        "w1_all": _dedup(j(c / "strokes.json")),
+        "w2_tr": j(c2 / "w2_group_train.json"), "w2_cal": j(c2 / "w2_group_calib.json"),
+        "w2_all": _dedup(j(c2 / "strokes.json")), "w2_held": j(c2 / "w2_group_heldout.json"),
+        "fc_tr": j(c2 / "fold_c_train.json"), "fc_te": j(c2 / "fold_c_test.json"),
+    }
+    cal_c = max(5, int(0.2 * len(s["fc_tr"])))
+    s["fc_cal"], s["fc_pure_tr"] = s["fc_tr"][-cal_c:], s["fc_tr"][:-cal_c]
+    return s
+
+
+def gate_subsets(sp: Dict[str, List[dict]]) -> Dict[str, List[dict]]:
+    """Test subsets that the Step-0 gate / baseline measurement use. Single source of truth."""
+    return {"A_test": sp["w2_all"], "B_test": sp["w1_all"], "C_test": sp["fc_te"], "LC_test": sp["w2_held"]}
+
+
+def lc_order(w2_pool_ids_by_group: Dict[str, List[str]], seed: int) -> List[str]:
+    """Group-respecting, seed-dependent order; nested prefixes give the learning-curve training sets."""
+    gids = sorted(w2_pool_ids_by_group)
+    random.Random(seed).shuffle(gids)
+    return [sid for g in gids for sid in w2_pool_ids_by_group[g]]
 
 
 def find_base_checkpoint(custom_path: Optional[str] = None) -> Optional[Path]:
@@ -158,10 +209,6 @@ def find_base_checkpoint(custom_path: Optional[str] = None) -> Optional[Path]:
         ROOT / "checkpoints" / "best.pt",
         ROOT / "checkpoints" / "step2b_v3" / "best.pt",
         Path("/content/drive/MyDrive/quran_htr_writer_checkpoints/step2b_v3/best.pt"),
-        Path("/content/drive/MyDrive/quran_htr_writer_checkpoints/run_visual/best.pt"),
-        Path("/content/drive/MyDrive/quran_htr_writer_checkpoints/best.pt"),
-        Path("/content/drive/MyDrive/quran_htr_writer_checkpoints/cont_best.pt"),
-        ROOT / "dist" / "best.pt",
     ])
     for c in candidates:
         if c.exists():
@@ -169,112 +216,223 @@ def find_base_checkpoint(custom_path: Optional[str] = None) -> Optional[Path]:
     return None
 
 
-class SimpleStrokeTrainDataset(Dataset):
-    def __init__(self, samples: List[dict], vocab: Vocabulary):
-        self.samples = samples
-        self.vocab = vocab
-
-    def __len__(self) -> int:
-        return len(self.samples)
-
-    def __getitem__(self, idx: int):
-        s = self.samples[idx]
-        txt = s["text"]
-        target = self.vocab.encode(txt)
-        # Visual order reversal for labels
-        target_vis = target[::-1]
-        img_t = get_canonical_zoom_and_render(s, augment=True, device="cpu").squeeze(0)  # [1, 64, W]
-        return img_t, target_vis, txt
+def load_base_model(base_ckpt: Path, vocab: Vocabulary, device: str) -> Tuple[nn.Module, str]:
+    """Loads weights STRICTLY and logs 'init_weights matched N/M tensors' (N must equal M)."""
+    assert_no_locked_test(str(base_ckpt))
+    model = CRNN(vocab_size=len(vocab), backbone="vgg_lite").to(device)
+    ckpt = torch.load(base_ckpt, map_location=device, weights_only=False)
+    st = ckpt["model"] if "model" in ckpt else ckpt.get("model_state", ckpt)
+    ms = model.state_dict()
+    matched = [k for k in st if k in ms and st[k].shape == ms[k].shape]
+    msg = f"init_weights matched {len(matched)}/{len(ms)} tensors"
+    print(msg)
+    assert len(matched) == len(ms), f"Weight matching failure: {msg}; missing {set(ms) - set(matched)}"
+    model.load_state_dict(st, strict=True)
+    return model, msg
 
 
-def collate_train_batch(batch):
-    imgs, targets, texts = zip(*batch)
-    max_w = max(img.shape[2] for img in imgs)
-    max_w = ((max_w + 31) // 32) * 32
-    B = len(imgs)
-    padded_imgs = torch.ones((B, 1, 64, max_w), dtype=torch.float32)
-    target_lengths = torch.tensor([len(t) for t in targets], dtype=torch.long)
-    flat_targets = torch.tensor([idx for t in targets for idx in t], dtype=torch.long)
-    input_lengths = torch.tensor([img.shape[2] // 4 for img in imgs], dtype=torch.long)
-    for i, img in enumerate(imgs):
-        w = img.shape[2]
-        padded_imgs[i, :, :, :w] = img
-    return padded_imgs, flat_targets, input_lengths, target_lengths, texts
+# ----------------------------------------------------------------------------------------------
+# Canonical eval, per-word error attribution, lexical stratification
+# ----------------------------------------------------------------------------------------------
+def predict_records(model: nn.Module, samples: List[dict], vocab: Vocabulary, device: str = "cpu",
+                    zoom_fn=None) -> List[dict]:
+    model.eval()
+    recs = []
+    with torch.no_grad():
+        for s in samples:
+            zo = zoom_fn(s) if zoom_fn else None
+            inp = get_canonical_zoom_and_render(s, augment=False, device=device, zoom_override=zo)
+            lp = model(inp)
+            recs.append({"id": s["id"], "text": s["text"], "pred": greedy_decode(lp, vocab, label_order="visual")[0]})
+    return recs
+
+
+def records_cer(records: List[dict]) -> float:
+    return 100.0 * corpus_cer_wer([r["pred"] for r in records], [r["text"] for r in records])[0]
+
+
+def canonical_cer(model: nn.Module, samples: List[dict], vocab: Vocabulary, device: str = "cpu") -> float:
+    """Canonical eval (zoom policy of docs/inference_contract, greedy decode, corpus CER, %)."""
+    return records_cer(predict_records(model, samples, vocab, device))
+
+
+def per_word_errors(ref: str, hyp: str) -> List[Tuple[str, int, int]]:
+    """Character edit errors attributed to REFERENCE words. Sub/del -> that ref char; insertion -> the
+    next ref char (clamped); space errors -> the word before the space. Sum of errors == edit distance."""
+    n, m = len(ref), len(hyp)
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n + 1):
+        dp[i][0] = i
+    for j in range(m + 1):
+        dp[0][j] = j
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            dp[i][j] = min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (ref[i - 1] != hyp[j - 1]))
+    err = [0] * max(n, 1)
+    i, j = n, m
+    while i > 0 or j > 0:
+        if i > 0 and j > 0 and dp[i][j] == dp[i - 1][j - 1] + (ref[i - 1] != hyp[j - 1]):
+            if ref[i - 1] != hyp[j - 1]:
+                err[i - 1] += 1
+            i -= 1
+            j -= 1
+        elif i > 0 and dp[i][j] == dp[i - 1][j] + 1:
+            err[i - 1] += 1
+            i -= 1
+        else:
+            err[min(i, n - 1) if n > 0 else 0] += 1
+            j -= 1
+    out, pos = [], 0
+    for w in ref.split(" "):
+        end = pos + len(w)
+        e = sum(err[pos:end]) + (err[end] if end < n else 0)
+        out.append((w, e, len(w)))
+        pos = end + 1
+    return out
+
+
+def stratify_cer(records: List[dict], seen_words: set) -> Dict[str, Dict[str, Any]]:
+    agg = {"seen": [0, 0, 0], "unseen": [0, 0, 0]}  # errors, chars, words
+    for r in records:
+        for w, e, l in per_word_errors(r["text"], r["pred"]):
+            k = "seen" if w in seen_words else "unseen"
+            agg[k][0] += e
+            agg[k][1] += l
+            agg[k][2] += 1
+    return {k: {"cer": (100.0 * v[0] / v[1]) if v[1] else None, "chars": v[1], "words": v[2]} for k, v in agg.items()}
+
+
+def words_of(samples: Sequence[dict]) -> set:
+    return {w for s in samples for w in s["text"].split()}
+
+
+# ----------------------------------------------------------------------------------------------
+# Gate baselines (measured independently by scripts/measure_gate_baselines.py)
+# ----------------------------------------------------------------------------------------------
+def load_gate_baselines(path: Path = GATE_BASELINE_PATH) -> dict:
+    return json.load(open(path, encoding="utf-8")) if path.exists() else {"devices": {}}
+
+
+def gate_check(device: str, subset: str, step0_cer: float, baselines: Optional[dict] = None) -> float:
+    baselines = baselines if baselines is not None else load_gate_baselines()
+    dev = "cuda" if str(device).startswith("cuda") else "cpu"
+    entry = baselines.get("devices", {}).get(dev, {}).get(subset)
+    if entry is None:
+        raise AssertionError(
+            f"STEP-0 GATE ABORT: no independent baseline for device={dev} subset={subset} in {GATE_BASELINE_PATH}. "
+            f"Run scripts/measure_gate_baselines.py on this device first.")
+    base = float(entry["cer"])
+    diff = abs(step0_cer - base)
+    print(f"[Step-0 Gate] {subset} on {dev}: evaluated {step0_cer:.2f}% vs baseline {base:.2f}% -> |diff| {diff:.2f} (tol {GATE_TOL})")
+    assert diff <= GATE_TOL, (f"STEP-0 GATE ABORT: {subset}/{dev} CER {step0_cer:.2f}% deviates from baseline "
+                              f"{base:.2f}% by {diff:.2f} pt (> {GATE_TOL}). Aborting training!")
+    print("[Step-0 Gate] PASSED")
+    return base
+
+
+# ----------------------------------------------------------------------------------------------
+# Mixed-source training stream
+# ----------------------------------------------------------------------------------------------
+class MixedStream(IterableDataset):
+    """Each yielded sample is drawn from strokes / synth / khatt with the given per-sample weights.
+    Used by the actual training loop (and by the tests). Yields (img[1,64,W], target(list[int]), src_idx)."""
+
+    def __init__(self, stroke_samples: List[dict], synth_ds, khatt_ds, weights: Sequence[float],
+                 vocab: Vocabulary, steps: int, batch_size: int, seed: int):
+        super().__init__()
+        self.stroke_samples, self.synth_ds, self.khatt_ds = stroke_samples, synth_ds, khatt_ds
+        self.weights, self.vocab = list(weights), vocab
+        self.steps, self.batch_size, self.seed = steps, batch_size, seed
+        for w, ds, name in ((self.weights[0], stroke_samples, "strokes"), (self.weights[1], synth_ds, "synth"),
+                            (self.weights[2], khatt_ds, "khatt")):
+            if w > 0 and (ds is None or len(ds) == 0):
+                raise ValueError(f"mix requires source '{name}' (weight {w}) but it is empty/unavailable")
+
+    def __iter__(self):
+        info = get_worker_info()
+        wid, nw = (info.id, info.num_workers) if info else (0, 1)
+        batches = self.steps // nw + (1 if wid < self.steps % nw else 0)
+        rng = random.Random(self.seed * 1_000_003 + wid)
+        random.seed(rng.random())  # module-level RNG drives on-the-fly augmentation
+        for _ in range(batches * self.batch_size):
+            src = rng.choices((0, 1, 2), weights=self.weights, k=1)[0]
+            if src == 0:
+                s = self.stroke_samples[rng.randrange(len(self.stroke_samples))]
+                img = get_canonical_zoom_and_render(s, augment=True, device="cpu").squeeze(0)
+                tgt = self.vocab.encode(s["text"][::-1])
+            else:
+                ds = self.synth_ds if src == 1 else self.khatt_ds
+                item = ds[rng.randrange(len(ds))]
+                img, tgt = item.image, item.target.tolist()
+            yield img, tgt, src
+
+
+def collate_mixed(batch):
+    imgs, targets, srcs = zip(*batch)
+    max_w = ((max(i.shape[-1] for i in imgs) + 31) // 32) * 32
+    padded = torch.ones((len(imgs), 1, 64, max_w), dtype=torch.float32)
+    for k, im in enumerate(imgs):
+        padded[k, :, :, :im.shape[-1]] = im
+    in_lens = torch.tensor([i.shape[-1] // 4 for i in imgs], dtype=torch.long)
+    tgt_lens = torch.tensor([len(t) for t in targets], dtype=torch.long)
+    flat = torch.tensor([x for t in targets for x in t], dtype=torch.long)
+    return padded, flat, in_lens, tgt_lens, list(srcs)
+
+
+# ----------------------------------------------------------------------------------------------
+# Threshold calibration and full test evaluation (CER + 3-state verification)
+# ----------------------------------------------------------------------------------------------
+def _quran_dict(limit: int) -> List[str]:
+    p = ROOT / "data" / "tanzil" / "quran-simple-clean.txt"
+    words: List[str] = []
+    if p.exists():
+        with open(p, encoding="utf-8") as f:
+            for l in f:
+                if not l.strip().startswith("#"):
+                    words.extend(l.strip().split())
+    return sorted(set(words))[:limit]
+
+
+def _mut_dict():
+    d = defaultdict(list)
+    for m in extract_mutashabih_pairs():
+        d[m["prefix"]].append(m["variant_b"].split()[-1])
+    return d
 
 
 def recalibrate_thresholds(model: nn.Module, calib_samples: List[dict], vocab: Vocabulary, device: str = "cpu"):
     model.eval()
-    tanzil_clean = ROOT / "data" / "tanzil" / "quran-simple-clean.txt"
-    q_dict = []
-    if tanzil_clean.exists():
-        with open(tanzil_clean, encoding="utf-8") as f:
-            for l in f:
-                if not l.strip().startswith("#"):
-                    q_dict.extend(l.strip().split())
-    q_dict = sorted(set(q_dict))[:5000]
-    mut_pairs = extract_mutashabih_pairs()
-    mut_dict = defaultdict(list)
-    for m in mut_pairs:
-        mut_dict[m["prefix"]].append(m["variant_b"].split()[-1])
-
-    true_llrs = []
-    corr_llrs = []
+    q_dict, mut_dict = _quran_dict(5000), _mut_dict()
+    true_llrs, corr_llrs = [], []
     rng = random.Random(123)
-
     with torch.no_grad():
         for s in calib_samples:
             inp = get_canonical_zoom_and_render(s, augment=False, device=device)
-            out = model(inp).squeeze(1).cpu().numpy()  # (T, V)
+            out = model(inp).squeeze(1).cpu().numpy()
             txt = s["text"]
-            # True claim
-            v_res = verify_reference(out, txt, vocab.char2idx, vocab.idx2char, t_accept=-0.6, t_wrong=-0.95, order="visual", norm="char")
-            for w_eval in v_res:
+            for w_eval in verify_reference(out, txt, vocab.char2idx, vocab.idx2char, t_accept=-0.6, t_wrong=-0.95, order="visual", norm="char"):
                 true_llrs.append(w_eval["llr"])
-
-            # Corrupted claim
             c_info = apply_corruption(txt, "dot_swap", q_dict, mut_dict, rng)
             if c_info:
-                c_txt, _ = c_info
-                cv_res = verify_reference(out, c_txt, vocab.char2idx, vocab.idx2char, t_accept=-0.6, t_wrong=-0.95, order="visual", norm="char")
-                for w_eval in cv_res:
+                for w_eval in verify_reference(out, c_info[0], vocab.char2idx, vocab.idx2char, t_accept=-0.6, t_wrong=-0.95, order="visual", norm="char"):
                     corr_llrs.append(w_eval["llr"])
-
     if not true_llrs:
         return -0.60, -0.95
     t_acc = float(np.percentile(true_llrs, 5))
     t_wrg_raw = float(np.percentile(corr_llrs, 90)) if corr_llrs else t_acc - 0.35
-    # Enforce strict monotonicity: t_wrong <= t_accept
-    t_wrg = min(t_acc - 0.20, t_wrg_raw)
+    t_wrg = min(t_acc - 0.20, t_wrg_raw)  # monotonic: t_wrong <= t_accept
     return round(t_acc, 4), round(t_wrg, 4)
 
 
-def assert_no_locked_test(path_or_str: Any):
-    p = str(path_or_str).replace("\\", "/").lower()
-    assert "locked_test" not in p, (
-        f"SECURITY VIOLATION: Tuning script attempted to access locked-test path: {path_or_str}. "
-        "Locked test writers are strictly reserved for final frozen evaluation and must never be touched during training/CV!"
-    )
-
-
-def evaluate_test_set(model: nn.Module, test_samples: List[dict], vocab: Vocabulary, t_acc: float, t_wrong: float, device: str = "cpu"):
+def evaluate_test_set(model: nn.Module, test_samples: List[dict], vocab: Vocabulary, t_acc: float, t_wrong: float,
+                      device: str = "cpu", seen_words: Optional[set] = None, skip_verification: bool = False):
     for s in test_samples:
         assert_no_locked_test(s.get("id", ""))
     model.eval()
-    tanzil_clean = ROOT / "data" / "tanzil" / "quran-simple-clean.txt"
-    q_dict = []
-    if tanzil_clean.exists():
-        with open(tanzil_clean, encoding="utf-8") as f:
-            for l in f:
-                if not l.strip().startswith("#"):
-                    q_dict.extend(l.strip().split())
-    q_dict = sorted(set(q_dict))[:14872]
-    mut_pairs = extract_mutashabih_pairs()
-    mut_dict = defaultdict(list)
-    for m in mut_pairs:
-        mut_dict[m["prefix"]].append(m["variant_b"].split()[-1])
+    q_dict = _quran_dict(14872)
+    mut_dict = _mut_dict() if not skip_verification else {}
 
-    line_gt, line_pred = [], []
-    word_gt, word_pred = [], []
+    records, line_gt, line_pred, word_gt, word_pred = [], [], [], [], []
     true_states = {"ACCEPT": 0, "UNCERTAIN": 0, "WRONG": 0}
     corr_wrg = defaultdict(lambda: {"WRONG": 0, "TOTAL": 0})
     ctypes = ["dot_swap", "del_ins", "word_swap", "adj_swap", "skip_word", "mutashabih"]
@@ -283,276 +441,258 @@ def evaluate_test_set(model: nn.Module, test_samples: List[dict], vocab: Vocabul
     with torch.no_grad():
         for s in test_samples:
             inp = get_canonical_zoom_and_render(s, augment=False, device=device)
-            logits = model(inp)  # (T, 1, V)
-            log_probs = logits.squeeze(1).cpu().numpy()
+            logits = model(inp)
             pred_txt = greedy_decode(logits, vocab, label_order="visual")[0]
             gt_txt = s["text"]
-
+            records.append({"id": s["id"], "text": gt_txt, "pred": pred_txt})
             if "line" in s.get("id", "") or len(gt_txt.split()) > 2:
-                line_gt.append(gt_txt)
-                line_pred.append(pred_txt)
+                line_gt.append(gt_txt); line_pred.append(pred_txt)
             else:
-                word_gt.append(gt_txt)
-                word_pred.append(pred_txt)
-
-            # True claim 3-state
-            v_res = verify_reference(log_probs, gt_txt, vocab.char2idx, vocab.idx2char, t_accept=t_acc, t_wrong=t_wrong, order="visual", norm="char")
-            for w in v_res:
+                word_gt.append(gt_txt); word_pred.append(pred_txt)
+            if skip_verification:
+                continue
+            log_probs = logits.squeeze(1).cpu().numpy()
+            for w in verify_reference(log_probs, gt_txt, vocab.char2idx, vocab.idx2char, t_accept=t_acc, t_wrong=t_wrong, order="visual", norm="char"):
                 true_states[w["state"]] += 1
-
-            # Corrupted claims
             for ct in ctypes:
                 c_info = apply_corruption(gt_txt, ct, q_dict, mut_dict, rng)
                 if c_info:
-                    c_txt, _ = c_info
-                    cv_res = verify_reference(log_probs, c_txt, vocab.char2idx, vocab.idx2char, t_accept=t_acc, t_wrong=t_wrong, order="visual", norm="char")
+                    cv = verify_reference(log_probs, c_info[0], vocab.char2idx, vocab.idx2char, t_accept=t_acc, t_wrong=t_wrong, order="visual", norm="char")
                     corr_wrg[ct]["TOTAL"] += 1
-                    # If any word is flagged WRONG, claim is caught
-                    if any(w["state"] == "WRONG" for w in cv_res):
+                    if any(w["state"] == "WRONG" for w in cv):
                         corr_wrg[ct]["WRONG"] += 1
 
-    all_gt = line_gt + word_gt
-    all_pred = line_pred + word_pred
-    cer_all, wer_all = corpus_cer_wer(all_pred, all_gt)
-    cer_lines, _ = corpus_cer_wer(line_pred, line_gt) if line_gt else (0.0, 0.0)
-    cer_words, _ = corpus_cer_wer(word_pred, word_gt) if word_gt else (0.0, 0.0)
-
-    total_true = sum(true_states.values()) or 1
-    true_acc_rate = round(100.0 * true_states["ACCEPT"] / total_true, 2)
-    true_unc_rate = round(100.0 * true_states["UNCERTAIN"] / total_true, 2)
-    true_wrg_rate = round(100.0 * true_states["WRONG"] / total_true, 2)
-
-    corr_rates = {}
-    for ct in ctypes:
-        tot = corr_wrg[ct]["TOTAL"]
-        corr_rates[ct] = round(100.0 * corr_wrg[ct]["WRONG"] / tot, 2) if tot > 0 else 100.0
-
-    return {
-        "cer_overall": round(cer_all * 100.0, 2),
-        "cer_lines": round(cer_lines * 100.0, 2),
-        "cer_words": round(cer_words * 100.0, 2),
-        "wer_overall": round(wer_all * 100.0, 2),
-        "true_accept_rate": true_acc_rate,
-        "true_unc_rate": true_unc_rate,
-        "true_wrg_rate": true_wrg_rate,
-        "corr_rejection": corr_rates,
+    cer_all, wer_all = corpus_cer_wer(line_pred + word_pred, line_gt + word_gt)
+    cer_lines = corpus_cer_wer(line_pred, line_gt)[0] if line_gt else 0.0
+    cer_words = corpus_cer_wer(word_pred, word_gt)[0] if word_gt else 0.0
+    res: Dict[str, Any] = {
+        "cer_overall": round(cer_all * 100.0, 2), "cer_lines": round(cer_lines * 100.0, 2),
+        "cer_words": round(cer_words * 100.0, 2), "wer_overall": round(wer_all * 100.0, 2),
     }
+    if not skip_verification:
+        tot = sum(true_states.values()) or 1
+        res.update({
+            "true_accept_rate": round(100.0 * true_states["ACCEPT"] / tot, 2),
+            "true_unc_rate": round(100.0 * true_states["UNCERTAIN"] / tot, 2),
+            "true_wrg_rate": round(100.0 * true_states["WRONG"] / tot, 2),
+            "corr_rejection": {ct: (round(100.0 * corr_wrg[ct]["WRONG"] / corr_wrg[ct]["TOTAL"], 2)
+                                    if corr_wrg[ct]["TOTAL"] else None) for ct in ctypes},
+        })
+    if seen_words is not None:
+        res["lexical"] = stratify_cer(records, seen_words)
+    return res
 
 
-def train_single_fold(
-    fold: str,
-    train_samples: List[dict],
-    calib_samples: List[dict],
-    test_samples: List[dict],
-    vocab: Vocabulary,
-    base_ckpt: Optional[Path],
-    epochs: int = 6,
-    lr: float = 5e-5,
-    steps_per_epoch: int = 1000,
-    batch_size: int = 8,
-    device: str = "cpu",
-):
-    print(f"\n=======================================================")
-    print(f"STARTING FOLD {fold} FINE-TUNING")
-    print(f"Train samples: {len(train_samples)} | Calib: {len(calib_samples)} | Test: {len(test_samples)}")
-    print(f"Schedule: {epochs} epochs x {steps_per_epoch} steps | Base LR: {lr} -> {lr/10.0}")
-    print(f"=======================================================")
+# ----------------------------------------------------------------------------------------------
+# Forgetting evals (KHATT val, synthetic test) -- same loader/metric as evaluate_continuation.py
+# ----------------------------------------------------------------------------------------------
+def eval_shard_cer(model: nn.Module, shard_path: Path, vocab: Vocabulary, device: str, limit: int = 0,
+                   batch_size: int = 32) -> float:
+    from shards import ShardDataset
+    from dataset import collate_fn as shard_collate
+    from evaluate import evaluate as eval_loader
+    assert_no_locked_test(str(shard_path))
+    ds = ShardDataset(shard_path, vocab, augment=False, label_order="visual")
+    if limit:
+        ds = Subset(ds, list(range(min(limit, len(ds)))))
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=False, collate_fn=shard_collate)
+    cer_v, _, _ = eval_loader(model, loader, vocab, torch.device(device), label_order="visual", max_samples_display=0)
+    return round(cer_v * 100.0, 3)
 
+
+# ----------------------------------------------------------------------------------------------
+# One training run
+# ----------------------------------------------------------------------------------------------
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def train_single_run(
+    fold: str, mix_name: str, seed: int, train_samples: List[dict], calib_samples: List[dict],
+    test_samples: List[dict], subset: str, vocab: Vocabulary, base_ckpt: Path, synth_ds, khatt_ds,
+    forget_paths: Dict[str, Path], args, device: str, lc_size: Optional[int] = None,
+) -> dict:
+    weights = MIXES[mix_name]
+    print(f"\n{'=' * 70}\nRUN fold={fold}{'' if lc_size is None else f'(n={lc_size})'} mix={mix_name} {weights} seed={seed} "
+          f"| train={len(train_samples)} calib={len(calib_samples)} test={len(test_samples)} | {args.epochs}x{args.steps_per_epoch} steps\n{'=' * 70}")
     for s in train_samples + calib_samples + test_samples:
         assert_no_locked_test(s.get("id", ""))
+    set_seed(seed)
+    model, matched_msg = load_base_model(base_ckpt, vocab, device)
 
-    model = CRNN(vocab_size=len(vocab), backbone="vgg_lite").to(device)
-    if not base_ckpt or not base_ckpt.exists():
-        raise FileNotFoundError(f"Base checkpoint not found at {base_ckpt}! Step-0 gate requires a valid checkpoint.")
+    # Step-0 gate (before any optimizer step)
+    step0_cer = canonical_cer(model, test_samples, vocab, device)
+    baseline = gate_check(device, subset, step0_cer)
 
-    print(f"Loading base checkpoint: {base_ckpt}")
-    assert_no_locked_test(str(base_ckpt))
-    ckpt_data = torch.load(base_ckpt, map_location=device, weights_only=False)
-    st = ckpt_data["model"] if "model" in ckpt_data else ckpt_data.get("model_state", ckpt_data)
-    model_state = model.state_dict()
-    matched_keys = [k for k in st.keys() if k in model_state and st[k].shape == model_state[k].shape]
-    print(f"init_weights matched {len(matched_keys)}/{len(model_state)} tensors")
-    assert len(matched_keys) == len(model_state), (
-        f"CRITICAL ERROR: Weight matching failure! Matched {len(matched_keys)}/{len(model_state)} tensors. "
-        f"Missing: {set(model_state.keys()) - set(matched_keys)}"
-    )
-    model.load_state_dict(st, strict=True)
+    seen_words = words_of(train_samples)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    total_steps = args.epochs * args.steps_per_epoch
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps, eta_min=args.lr / 10.0)
+    ctc = nn.CTCLoss(blank=0, zero_infinity=True)
 
-    # Step-0 gate: evaluate the loaded model on the test writer before training;
-    # abort unless it matches the known baseline within 1 pt.
-    print(f"\n[Step-0 Gate] Pre-training evaluation on Fold {fold} test writer...")
-    step0_res = evaluate_test_set(model, test_samples, vocab, t_acc=-0.60, t_wrong=-0.95, device=device)
-    step0_cer = step0_res["cer_overall"]
-    print(f"[Step-0 Gate] Evaluated pre-training CER on test writer: {step0_cer:.2f}%")
-
-    if fold == "A":
-        # Known baseline on writer_02 canonical scale is 36.15% (CUDA) / 37.24% (CPU)
-        known_baseline = 36.15 if device == "cuda" else 37.24
-        cer_diff = abs(step0_cer - known_baseline)
-        print(f"[Step-0 Gate] Fold A: |evaluated {step0_cer:.2f}% - baseline {known_baseline:.2f}% ({device})| = {cer_diff:.2f}% (tolerance: <= 1.0 pt)")
-        assert cer_diff <= 1.0 or abs(step0_cer - 37.24) <= 1.5, (
-            f"STEP-0 GATE ABORT: Loaded model baseline CER ({step0_cer:.2f}%) deviates from "
-            f"known baseline ({known_baseline:.2f}%) by {cer_diff:.2f} pt (> 1.0 pt). Aborting training!"
-        )
-        print("[Step-0 Gate] Gate PASSED (within 1 pt of device baseline).")
-    elif fold == "B":
-        # Known baseline on writer_01 is 24.07% (CPU) / ~23-25% (CUDA)
-        known_baseline = 24.07
-        cer_diff = abs(step0_cer - known_baseline)
-        print(f"[Step-0 Gate] Fold B: |evaluated {step0_cer:.2f}% - baseline {known_baseline:.2f}%| = {cer_diff:.2f}% (tolerance: <= 1.5 pt)")
-        assert cer_diff <= 1.5, (
-            f"STEP-0 GATE ABORT: Loaded model baseline CER ({step0_cer:.2f}%) deviates from "
-            f"known baseline ({known_baseline:.2f}%) by {cer_diff:.2f} pt (> 1.5 pt). Aborting training!"
-        )
-        print("[Step-0 Gate] Gate PASSED (within tolerance of known baseline).")
-    else:
-        print(f"[Step-0 Gate] Fold {fold} pre-eval CER: {step0_cer:.2f}% (Gate verified).")
-
-    # Train dataset & loader
-    train_ds = SimpleStrokeTrainDataset(train_samples, vocab)
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=min(batch_size, len(train_ds)),
-        shuffle=True,
-        collate_fn=collate_train_batch,
-        drop_last=False,
-    )
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    total_steps = epochs * steps_per_epoch
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps, eta_min=lr / 10.0)
-    ctc_loss_fn = nn.CTCLoss(blank=0, zero_infinity=True)
-
-    model.train()
-    step_count = 0
-    loader_iter = iter(train_loader)
-
-    for epoch in range(1, epochs + 1):
-        epoch_loss = 0.0
-        batch_counts = {"strokes": 0, "synth": 0, "khatt": 0}
-        for step in range(steps_per_epoch):
-            try:
-                batch = next(loader_iter)
-            except StopIteration:
-                loader_iter = iter(train_loader)
-                batch = next(loader_iter)
-
-            batch_counts["strokes"] += 1
-            imgs, flat_targets, in_lens, tgt_lens, _ = batch
-            imgs = imgs.to(device)
-            flat_targets = flat_targets.to(device)
-            in_lens = in_lens.to(device)
-            tgt_lens = tgt_lens.to(device)
-
+    epoch_log = []
+    t0 = time.time()
+    for epoch in range(1, args.epochs + 1):
+        model.train()
+        stream = MixedStream(train_samples, synth_ds, khatt_ds, weights, vocab, args.steps_per_epoch,
+                             args.batch_size, seed=seed * 10_000 + epoch)
+        loader = DataLoader(stream, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=collate_mixed)
+        counts = {k: 0 for k in SOURCES}
+        loss_sum, steps_done = 0.0, 0
+        for imgs, flat, in_lens, tgt_lens, srcs in loader:
+            for s in srcs:
+                counts[SOURCES[s]] += 1
             optimizer.zero_grad()
-            logits = model(imgs)  # (T, B, V)
-            log_probs = logits.log_softmax(dim=-1)
-            loss = ctc_loss_fn(log_probs, flat_targets, in_lens, tgt_lens)
-
-            if not torch.isnan(loss) and not torch.isinf(loss):
+            lp = model(imgs.to(device)).log_softmax(dim=-1)
+            loss = ctc(lp, flat.to(device), in_lens, tgt_lens)
+            if torch.isfinite(loss):
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
                 optimizer.step()
-                epoch_loss += loss.item()
+                loss_sum += loss.item()
             scheduler.step()
-            step_count += 1
+            steps_done += 1
+        assert steps_done == args.steps_per_epoch, f"expected {args.steps_per_epoch} steps, ran {steps_done}"
+        if weights[1] > 0:
+            assert counts["synth"] > 0 and counts["khatt"] > 0, f"epoch {epoch}: zero synth/khatt samples {counts}"
+        if weights[0] > 0:
+            assert counts["strokes"] > 0, f"epoch {epoch}: zero stroke samples {counts}"
+        avg = loss_sum / max(1, steps_done)
+        epoch_log.append({"epoch": epoch, "loss": round(avg, 5), "samples_by_source": dict(counts)})
+        print(f"  [{fold}/{mix_name}/s{seed}] epoch {epoch}/{args.epochs} loss={avg:.4f} lr={scheduler.get_last_lr()[0]:.6f} "
+              f"samples by source: strokes={counts['strokes']} synth={counts['synth']} khatt={counts['khatt']}")
+    train_secs = round(time.time() - t0, 1)
 
-        avg_loss = epoch_loss / max(1, steps_per_epoch)
-        current_lr = scheduler.get_last_lr()[0]
-        print(f"  [Fold {fold}] Epoch {epoch}/{epochs} | CTC Loss: {avg_loss:.4f} | LR: {current_lr:.6f} | "
-              f"Batches by source: strokes={batch_counts['strokes']}, synth={batch_counts['synth']}, khatt={batch_counts['khatt']}")
+    thresholds = None
+    if not args.skip_verification and calib_samples:
+        t_acc, t_wrg = recalibrate_thresholds(model, calib_samples, vocab, device=device)
+        thresholds = [t_acc, t_wrg]
+    else:
+        t_acc, t_wrg = -0.60, -0.95
+    res = evaluate_test_set(model, test_samples, vocab, t_acc, t_wrg, device=device, seen_words=seen_words,
+                            skip_verification=args.skip_verification or not calib_samples)
 
-    # Save checkpoint
-    out_dir = ROOT / "checkpoints"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    save_path = out_dir / f"lowo_fold_{fold}.pt"
-    torch.save({"model_state": model.state_dict(), "label_order": "visual"}, save_path)
-    print(f"Saved Fold {fold} checkpoint to {save_path}")
+    forgetting = {}
+    if not args.skip_forgetting:
+        for name, p in forget_paths.items():
+            forgetting[name] = eval_shard_cer(model, p, vocab, device, limit=args.forget_limit)
+    rec = {
+        "fold": fold, "mix": mix_name, "weights": list(weights), "seed": seed, "lc_size": lc_size, "device": device,
+        "epochs": args.epochs, "steps_per_epoch": args.steps_per_epoch, "batch_size": args.batch_size, "lr": args.lr,
+        "init_weights": matched_msg, "subset": subset, "n_train": len(train_samples), "n_test": len(test_samples),
+        "step0_cer": round(step0_cer, 2), "gate_baseline": baseline, "epoch_log": epoch_log, "train_secs": train_secs,
+        "thresholds": thresholds, "result": res, "forgetting": forgetting, "forget_limit": args.forget_limit,
+    }
+    print(f"  RESULT {fold}/{mix_name}/s{seed}: CER {step0_cer:.2f}% -> {res['cer_overall']}% "
+          f"(lines {res['cer_lines']} / words {res['cer_words']}) forgetting={forgetting}")
+    return rec
 
-    # Recalibrate thresholds on calibration slice
-    t_acc, t_wrg = recalibrate_thresholds(model, calib_samples, vocab, device=device)
-    print(f"Recalibrated thresholds on 20% slice: t_accept = {t_acc}, t_wrong = {t_wrg}")
 
-    # Evaluate on held-out test writer
-    eval_res = evaluate_test_set(model, test_samples, vocab, t_acc, t_wrg, device=device)
-    eval_res["t_accept"] = t_acc
-    eval_res["t_wrong"] = t_wrg
-    print(f"Fold {fold} Results: CER Lines={eval_res['cer_lines']}%, CER Words={eval_res['cer_words']}%, Overall={eval_res['cer_overall']}%")
-    print(f"True-Accept={eval_res['true_accept_rate']}% | Dot Swap WRONG={eval_res['corr_rejection'].get('dot_swap')}% | Word Swap WRONG={eval_res['corr_rejection'].get('word_swap')}%")
-    return eval_res
+def run_key(r: dict) -> tuple:
+    return (r["fold"], r["mix"], r["seed"], r.get("lc_size"), r["epochs"], r["steps_per_epoch"], r["device"])
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Cross-Writer LOWO and Personalization Training")
-    parser.add_argument("--folds", nargs="+", default=["A", "B", "C"], help="Folds to execute (A, B, C)")
-    parser.add_argument("--epochs", type=int, default=6, help="Epochs per fold")
-    parser.add_argument("--steps_per_epoch", type=int, default=1000, help="Steps per epoch")
-    parser.add_argument("--lr", type=float, default=5e-5, help="Initial learning rate")
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
-    parser.add_argument("--base_checkpoint", type=str, default=None, help="Base CRNN checkpoint")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="Dev-writer cross-writer fine-tuning with anchored mix, seeds and gate")
+    ap.add_argument("--folds", nargs="+", default=["A", "B", "C"], help="A B C CLC")
+    ap.add_argument("--mixes", nargs="+", default=list(MIXES), choices=list(MIXES))
+    ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2, 3, 4])
+    ap.add_argument("--lc_sizes", nargs="+", type=int, default=list(LC_SIZES))
+    ap.add_argument("--epochs", type=int, default=6)
+    ap.add_argument("--steps_per_epoch", type=int, default=1000)
+    ap.add_argument("--lr", type=float, default=5e-5)
+    ap.add_argument("--batch_size", type=int, default=8)
+    ap.add_argument("--num_workers", type=int, default=0)
+    ap.add_argument("--device", default="auto")
+    ap.add_argument("--base_checkpoint", default=None)
+    ap.add_argument("--synth_shards", nargs="+", default=["data/shards/synth/synth_train_000.pt"])
+    ap.add_argument("--khatt_shards", nargs="+", default=["data/shards/khatt/khatt_train_000.pt"])
+    ap.add_argument("--khatt_val", default="data/shards/khatt/khatt_val_000.pt")
+    ap.add_argument("--synth_test", default="data/shards/synth/synth_test_000.pt")
+    ap.add_argument("--forget_limit", type=int, default=0, help="0 = full eval sets")
+    ap.add_argument("--skip_forgetting", action="store_true")
+    ap.add_argument("--skip_verification", action="store_true", help="CER only (no thresholds / 3-state)")
+    ap.add_argument("--results", default="reports/lowo_runs.jsonl")
+    args = ap.parse_args()
+
+    for p in list(args.synth_shards) + list(args.khatt_shards) + [args.khatt_val, args.synth_test, args.results]:
+        assert_no_locked_test(p)
+    device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
+    print(f"Device: {device} | folds={args.folds} mixes={args.mixes} seeds={args.seeds}")
 
     generate_all_group_splits()
     vocab = Vocabulary.load(ROOT / "vocab.json")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Execution Device: {device} | Folds: {args.folds}")
-
     base_ckpt = find_base_checkpoint(args.base_checkpoint)
-    print(f"Using base checkpoint: {base_ckpt}")
+    assert base_ckpt is not None, "base checkpoint not found"
+    print(f"Base checkpoint: {base_ckpt}")
+    sp = load_dev_splits()
+    subsets = gate_subsets(sp)
 
-    # Load splits
-    w1_tr = json.load(open(ROOT / "data" / "capture" / "w1_group_train.json", encoding="utf-8"))
-    w1_cal = json.load(open(ROOT / "data" / "capture" / "w1_group_calib.json", encoding="utf-8"))
-    w1_raw = json.load(open(ROOT / "data" / "capture" / "strokes.json", encoding="utf-8"))
-    w1_all = list({x["id"]: x for x in w1_raw if isinstance(x, dict) and "id" in x}.values())
+    need_anchor = any(MIXES[m][1] > 0 for m in args.mixes)
+    synth_ds = khatt_ds = None
+    if need_anchor:
+        from shards import ShardDataset
+        synth_ds = ShardDataset([ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.synth_shards], vocab, augment=True, label_order="visual")
+        khatt_ds = ShardDataset([ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.khatt_shards], vocab, augment=True, label_order="visual")
+        print(f"Anchor pools: synth={len(synth_ds)} khatt={len(khatt_ds)}")
+    forget_paths = {}
+    rp = lambda p: Path(p) if Path(p).is_absolute() else ROOT / p
+    if not args.skip_forgetting:
+        forget_paths = {"khatt_val_cer": rp(args.khatt_val), "synth_test_cer": rp(args.synth_test)}
 
-    w2_tr = json.load(open(ROOT / "data" / "capture_v2" / "writer_02" / "w2_group_train.json", encoding="utf-8"))
-    w2_cal = json.load(open(ROOT / "data" / "capture_v2" / "writer_02" / "w2_group_calib.json", encoding="utf-8"))
-    w2_raw = json.load(open(ROOT / "data" / "capture_v2" / "writer_02" / "strokes.json", encoding="utf-8"))
-    w2_all = list({x["id"]: x for x in w2_raw if isinstance(x, dict) and "id" in x}.values())
+    results_path = rp(args.results)
+    results_path.parent.mkdir(parents=True, exist_ok=True)
+    done = set()
+    if results_path.exists():
+        for line in open(results_path, encoding="utf-8"):
+            if line.strip():
+                done.add(run_key(json.loads(line)))
+    print(f"Resuming: {len(done)} runs already recorded in {results_path}")
 
-    fc_tr = json.load(open(ROOT / "data" / "capture_v2" / "writer_02" / "fold_c_train.json", encoding="utf-8"))
-    fc_te = json.load(open(ROOT / "data" / "capture_v2" / "writer_02" / "fold_c_test.json", encoding="utf-8"))
+    # nested learning-curve pool: w02 train+calib (14 groups) in group order
+    w2_by_id, w2_groups = build_w2_groups()
+    pool_ids = {s["id"] for s in sp["w2_tr"] + sp["w2_cal"]}
+    pool_by_group = {g: [sid for sid in sids if sid in pool_ids] for g, sids in w2_groups.items()}
+    pool_by_group = {g: v for g, v in pool_by_group.items() if v and g != "group_extra"}
+    for sid in w2_groups.get("group_extra", []):
+        if sid in pool_ids:
+            pool_by_group[f"extra::{sid}"] = [sid]
 
-    results = {}
     folds = [f.upper() for f in args.folds]
-
-    if "A" in folds:
-        # Fold A: Train w01 (80%) -> Calib w01 (20%) -> Test w02 (100% held-out)
-        res_a = train_single_fold(
-            "A", w1_tr, w1_cal, w2_all, vocab, base_ckpt,
-            epochs=args.epochs, lr=args.lr, steps_per_epoch=args.steps_per_epoch,
-            batch_size=args.batch_size, device=device
-        )
-        results["Fold_A"] = res_a
-
-    if "B" in folds:
-        # Fold B: Train w02 (80%) -> Calib w02 (20%) -> Test w01 (100% held-out)
-        res_b = train_single_fold(
-            "B", w2_tr, w2_cal, w1_all, vocab, base_ckpt,
-            epochs=args.epochs, lr=args.lr, steps_per_epoch=args.steps_per_epoch,
-            batch_size=args.batch_size, device=device
-        )
-        results["Fold_B"] = res_b
-
-    if "C" in folds:
-        # Fold C: Train w02 50% groups -> Calib on 20% of train -> Test remaining 50% groups
-        cal_c_size = max(5, int(0.2 * len(fc_tr)))
-        fc_cal = fc_tr[-cal_c_size:]
-        fc_pure_tr = fc_tr[:-cal_c_size]
-        res_c = train_single_fold(
-            "C", fc_pure_tr, fc_cal, fc_te, vocab, base_ckpt,
-            epochs=args.epochs, lr=args.lr, steps_per_epoch=args.steps_per_epoch,
-            batch_size=args.batch_size, device=device
-        )
-        results["Fold_C"] = res_c
-
-    # Save summary report
-    rep_dir = ROOT / "reports"
-    rep_dir.mkdir(parents=True, exist_ok=True)
-    with open(rep_dir / "lowo_fold_results.json", "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
-    print("\nSaved all fold results to reports/lowo_fold_results.json")
+    for seed in args.seeds:
+        jobs = []
+        for mix in args.mixes:
+            if "A" in folds:
+                jobs.append(("A", mix, None, sp["w1_tr"], sp["w1_cal"], sp["w2_all"], "A_test"))
+            if "B" in folds:
+                jobs.append(("B", mix, None, sp["w2_tr"], sp["w2_cal"], sp["w1_all"], "B_test"))
+            if "C" in folds:
+                jobs.append(("C", mix, None, sp["fc_pure_tr"], sp["fc_cal"], sp["fc_te"], "C_test"))
+            if "CLC" in folds:
+                order = lc_order(pool_by_group, seed)
+                for n in args.lc_sizes:
+                    jobs.append(("CLC", mix, n, [w2_by_id[s] for s in order[:n]], [], sp["w2_held"], "LC_test"))
+        for fold, mix, n, tr, cal, te, subset in jobs:
+            probe = {"fold": fold, "mix": mix, "seed": seed, "lc_size": n, "epochs": args.epochs,
+                     "steps_per_epoch": args.steps_per_epoch, "device": device}
+            if run_key(probe) in done:
+                print(f"[skip] already done: {run_key(probe)}")
+                continue
+            if fold == "CLC":
+                a = argparse.Namespace(**vars(args))
+                a.skip_verification = True
+            else:
+                a = args
+            rec = train_single_run(fold, mix, seed, tr, cal, te, subset, vocab, base_ckpt, synth_ds, khatt_ds,
+                                   forget_paths, a, device, lc_size=n)
+            with open(results_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            done.add(run_key(rec))
+    print(f"\nAll requested runs complete -> {results_path}")
 
 
 if __name__ == "__main__":

@@ -75,8 +75,66 @@ Caveats: (1) Fold C step-0 has no independent known baseline (gate is vacuous th
 ### 3b. Superseded INVALID rows (uninitialized-weight run)
 
 | Protocol / Fold | Train Split | Test Split | Train Epochs & Loss | Calibrated Thresholds ($t_{\text{acc}}, t_{\text{wrg}}$) | Lines CER | Words CER | Overall CER | True-Accept Rate | Dot Swap WRONG | Word Swap WRONG | Status |
-| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Fold A (LOWO)** | `writer_01` (70 train, 30 calib) | `writer_02` (148 held-out) | 6 epochs ($3.32 \to 0.021$) | $-6.28, -6.48$ | 104.98% | 102.25% | **103.55%** | **88.61%** | 22.40% | 59.46% | **INVALID** (Uninitialized weights) |
 | **Fold B (LOWO)** | `writer_02` (14 train grps, calib) | `writer_01` (100 held-out) | 6 epochs ($3.25 \to 0.025$) | $-6.53, -6.73$ | 109.50% | 75.80% | **102.26%** | **84.40%** | 42.16% | 69.09% | **INVALID** (Uninitialized weights) |
 | **Fold C (Personalized)** | `writer_02` (10 train grps, calib) | `writer_02` (10 held-out grps) | 6 epochs ($3.04 \to 0.013$) | $-6.20, -6.40$ | 99.36% | 91.35% | **95.03%** | **83.04%** | 33.90% | 68.57% | **INVALID** (Uninitialized weights) |
+
+---
+
+## 4. Independent Gate Baselines (`configs/gate_baselines.json`)
+
+Precomputed canonical evaluation of the untrained base model (`best.pt`, 74/74 tensors matched) across all test subsets. Evaluated with 3 repeated draws to verify determinism. Step-0 gate enforces $\le 1.0\text{ pt}$ tolerance on the same hardware target.
+
+| Subset Name | Target Writer | Sample Count ($n$) | CPU Baseline CER | CPU Repeat Spread | Target Tolerance | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :--- |
+| **`A_test`** | `writer_02` (all) | 145 | **37.24%** | 0.000% | $\pm 1.0$ pt | Canonical Frozen |
+| **`B_test`** | `writer_01` (all) | 100 | **25.62%** | 0.000% | $\pm 1.0$ pt | Canonical Frozen |
+| **`C_test`** | `writer_02` (50% held-out grps) | 76 | **41.25%** | 0.000% | $\pm 1.0$ pt | Canonical Frozen |
+| **`LC_test`** | `writer_02` (held-out learning curve grps) | 45 | **39.35%** | 0.000% | $\pm 1.0$ pt | Canonical Frozen |
+
+*Note: On CUDA CuDNN FP32, convolution precision produces ~1.09 pt drift (e.g. 36.15% on `A_test`). CUDA values are measured and recorded under `devices.cuda` in `configs/gate_baselines.json` when running on GPU.*
+
+---
+
+## 5. Lexical-Overlap Audit (`reports/lexical_overlap_audit.json`)
+
+Measures the share of test-prompt words found in train prompts, and stratifies pre-training baseline CER into seen vs. unseen vocabulary words across each partition.
+
+| Fold / Split | Train Writer ($n$) | Test Writer ($n$) | Total Test Tokens | Tokens Seen in Train (%) | Types Seen in Train (%) | Fully Seen Samples (%) | Baseline CER Seen Words | Baseline CER Unseen Words | Lexical Gap (Δ) |
+| :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Fold A** | w01 (70) | w02 (145) | 230 | **24.78%** (57/230) | **22.61%** (26/115) | 22.07% | 35.87% | 41.53% | −5.66 pt |
+| **Fold B** | w02 (82) | w01 (100) | 269 | **20.07%** (54/269) | **12.68%** (26/205) | 14.00% | 27.53% | 29.88% | −2.35 pt |
+| **Fold C** | w02 (56) | w02 (76) | 117 | **17.95%** (21/117) | **8.77%** (5/57) | 17.11% | 47.95% | 43.95% | +4.00 pt |
+| **Fold CLC** | w02 (100) | w02 (45) | 69 | **30.43%** (21/69) | **20.00%** (6/30) | 33.33% | 45.95% | 41.51% | +4.44 pt |
+
+*Finding: In cross-writer folds (A & B), seen words have lower baseline error by 2–6 pt. In within-writer partitions (C & CLC), group splitting holds out ~82% of tokens; the small seen sample size shows baseline CER parity.*
+
+---
+
+## 6. Label-Free Adaptation Without Training (`reports/label_free_adaptation.json`)
+
+Tests whether unsupervised feature alignment (AdaBN recomputing running statistics without backprop or labels) and global target scale normalization ($S_w$ with exact no-clip margin) improve recognition without gradient updates. Evaluated on DEV writers (`writer_01`, `writer_02`).
+
+| Writer | Metric / Policy | Baseline (Canonical) | AdaBN (Unlabeled Stats) | Scale Norm ($S_w$) | Scale + AdaBN | Clipped Samples (Canon vs Norm) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **`writer_01`** ($n=100$) | Zoom / Scale | 1.389x (v1) | 1.389x | $S_w = 0.615$ | $S_w = 0.615$ | **42 → 0** clipped |
+| | **Overall CER** | **25.62%** | **34.81%** (+9.19) | **47.90%** (+22.27) | **64.80%** (+39.17) | |
+| **`writer_02`** ($n=145$) | Zoom / Scale | 1.000x (v2) | 1.000x | $S_w = 0.362$ | $S_w = 0.362$ | **80 → 0** clipped |
+| | **Overall CER** | **37.24%** | **44.93%** (+7.69) | **54.60%** (+17.35) | **69.89%** (+32.65) | |
+
+*Key Finding: Passive label-free adaptation is strictly detrimental. Recomputing BatchNorm statistics on small sample sizes (100–145) shifts running stats away from the generalized pre-trained domain. Scaling down ink to accommodate extreme ascender samples shrinks average character height below the CNN receptive field. Gradient-based fine-tuning with anchor replay is mandatory.*
+
+---
+
+## 7. Locked-Test Partition Status (`configs/writer_splits.yaml`)
+
+Cryptographically isolated test partition to prevent test set leakage.
+
+- **Dev Writers**: `writer_01` (100 samples), `writer_02` (145 samples).
+- **Locked Test Writers**: `writer_03` (102 samples), `writer_04` (104 samples).
+- **Location**: `data/locked_test/` with manifest `data/locked_test/SHA256SUMS`.
+- **Enforcement**: All training, tuning, and evaluation scripts enforce `assert_no_locked_test()`.
+- **Evaluations to date**: **0** (untouched and uninspected).
+
 

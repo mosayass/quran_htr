@@ -1,0 +1,49 @@
+{
+  "devices": {
+    "cpu": {
+      "A_test": {
+        "cer": 37.242,
+        "repeats": [
+          37.242,
+          37.242,
+          37.242
+        ],
+        "spread": 0.0,
+        "n": 145
+      },
+      "B_test": {
+        "cer": 25.6231,
+        "repeats": [
+          25.6231,
+          25.6231,
+          25.6231
+        ],
+        "spread": 0.0,
+        "n": 100
+      },
+      "C_test": {
+        "cer": 41.25,
+        "repeats": [
+          41.25,
+          41.25,
+          41.25
+        ],
+        "spread": 0.0,
+        "n": 76
+      },
+      "LC_test": {
+        "cer": 39.3548,
+        "repeats": [
+          39.3548,
+          39.3548,
+          39.3548
+        ],
+        "spread": 0.0,
+        "n": 45
+      }
+    }
+  },
+  "tolerance_pt": 1.0,
+  "checkpoint": "best.pt",
+  "note": "Independent canonical-eval baselines of the UNTRAINED base checkpoint, per device."
+}

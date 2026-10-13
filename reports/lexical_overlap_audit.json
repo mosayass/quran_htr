@@ -1,0 +1,106 @@
+{
+  "A (train w01 -> test w02)": {
+    "test_writer": "writer_02",
+    "overlap": {
+      "n_train": 70,
+      "n_test": 145,
+      "test_tokens": 230,
+      "tokens_seen": 57,
+      "token_share_seen": 24.78,
+      "test_types": 115,
+      "types_seen": 26,
+      "type_share_seen": 22.61,
+      "samples_fully_seen_pct": 22.07
+    },
+    "base_model_cer_by_lexicon": {
+      "seen": {
+        "cer": 35.869565217391305,
+        "chars": 184,
+        "words": 57
+      },
+      "unseen": {
+        "cer": 41.53074027603513,
+        "chars": 797,
+        "words": 173
+      }
+    }
+  },
+  "B (train w02 -> test w01)": {
+    "test_writer": "writer_01",
+    "overlap": {
+      "n_train": 82,
+      "n_test": 100,
+      "test_tokens": 269,
+      "tokens_seen": 54,
+      "token_share_seen": 20.07,
+      "test_types": 205,
+      "types_seen": 26,
+      "type_share_seen": 12.68,
+      "samples_fully_seen_pct": 14.0
+    },
+    "base_model_cer_by_lexicon": {
+      "seen": {
+        "cer": 27.528089887640448,
+        "chars": 178,
+        "words": 54
+      },
+      "unseen": {
+        "cer": 29.882604055496266,
+        "chars": 937,
+        "words": 215
+      }
+    }
+  },
+  "C (w02 50% groups -> w02 other 50%)": {
+    "test_writer": "writer_02",
+    "overlap": {
+      "n_train": 56,
+      "n_test": 76,
+      "test_tokens": 117,
+      "tokens_seen": 21,
+      "token_share_seen": 17.95,
+      "test_types": 57,
+      "types_seen": 5,
+      "type_share_seen": 8.77,
+      "samples_fully_seen_pct": 17.11
+    },
+    "base_model_cer_by_lexicon": {
+      "seen": {
+        "cer": 47.945205479452056,
+        "chars": 73,
+        "words": 21
+      },
+      "unseen": {
+        "cer": 43.946188340807176,
+        "chars": 446,
+        "words": 96
+      }
+    }
+  },
+  "CLC (w02 14-group pool -> w02 held-out groups)": {
+    "test_writer": "writer_02",
+    "overlap": {
+      "n_train": 100,
+      "n_test": 45,
+      "test_tokens": 69,
+      "tokens_seen": 21,
+      "token_share_seen": 30.43,
+      "test_types": 30,
+      "types_seen": 6,
+      "type_share_seen": 20.0,
+      "samples_fully_seen_pct": 33.33
+    },
+    "base_model_cer_by_lexicon": {
+      "seen": {
+        "cer": 45.945945945945944,
+        "chars": 74,
+        "words": 21
+      },
+      "unseen": {
+        "cer": 41.509433962264154,
+        "chars": 212,
+        "words": 48
+      }
+    }
+  }
+}
