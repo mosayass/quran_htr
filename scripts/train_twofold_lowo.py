@@ -599,6 +599,59 @@ def run_key(r: dict) -> tuple:
     return (r["fold"], r["mix"], r["seed"], r.get("lc_size"), r["epochs"], r["steps_per_epoch"], r["device"])
 
 
+def ensure_shards_available(shards: Sequence[str | Path]):
+    import shutil
+    import zipfile
+    for sp in shards:
+        p = Path(sp) if Path(sp).is_absolute() else ROOT / sp
+        if p.exists():
+            continue
+        kind = "synth" if "synth" in p.name else ("khatt" if "khatt" in p.name else None)
+        if not kind:
+            continue
+        p.parent.mkdir(parents=True, exist_ok=True)
+        # 1. Direct copy candidate files
+        direct_candidates = [
+            Path(f"/content/drive/MyDrive/quran_htr_data/shards/{kind}/{p.name}"),
+            Path(f"/content/drive/MyDrive/quran_htr_data/{p.name}"),
+            Path(f"/content/drive/MyDrive/quran_htr/data/shards/{kind}/{p.name}"),
+            Path(f"/content/drive/MyDrive/shards_{kind}/{p.name}"),
+            Path(f"/content/drive/MyDrive/{p.name}"),
+        ]
+        for dc in direct_candidates:
+            if dc.exists():
+                print(f"[Auto-Sync] Copying {dc} -> {p}...")
+                shutil.copy2(dc, p)
+                break
+        if p.exists():
+            continue
+
+        # 2. Extract from zip archives
+        zip_candidates = [
+            Path(f"/content/drive/MyDrive/quran_htr/dist/shards_{kind}.zip"),
+            Path(f"/content/drive/MyDrive/shards_{kind}.zip"),
+            ROOT / f"dist/shards_{kind}.zip",
+            Path("/content/drive/MyDrive/quran_htr/dist/shards_corpus_v3.zip"),
+            Path("/content/drive/MyDrive/shards_corpus_v3.zip"),
+            ROOT / "dist/shards_corpus_v3.zip",
+        ]
+        for z_path in zip_candidates:
+            if z_path.exists():
+                try:
+                    with zipfile.ZipFile(z_path, "r") as zf:
+                        matches = [m for m in zf.namelist() if m.endswith(p.name) or Path(m).name == p.name]
+                        if matches:
+                            print(f"[Auto-Extract] Extracting {matches[0]} from {z_path} -> {p}...")
+                            with zf.open(matches[0]) as sf, open(p, "wb") as df:
+                                shutil.copyfileobj(sf, df)
+                            print(f"[Auto-Extract] Successfully extracted {p}")
+                            break
+                except Exception as e:
+                    print(f"[Auto-Extract Warn] Failed extracting from {z_path}: {e}")
+            if p.exists():
+                break
+
+
 def main():
     ap = argparse.ArgumentParser(description="Dev-writer cross-writer fine-tuning with anchored mix, seeds and gate")
     ap.add_argument("--folds", nargs="+", default=["A", "B", "C"], help="A B C CLC")
@@ -641,11 +694,12 @@ def main():
         from shards import ShardDataset
         synth_files = [ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.synth_shards]
         khatt_files = [ROOT / p if not Path(p).is_absolute() else Path(p) for p in args.khatt_shards]
+        ensure_shards_available(synth_files + khatt_files)
         missing = [str(f) for f in synth_files + khatt_files if not f.exists()]
         if missing:
             raise FileNotFoundError(
                 f"Missing anchor shard(s) for mix training: {missing}. "
-                f"Ensure shards are synced to data/shards/ or run with '--mixes stroke_only'.")
+                f"Ensure shards_synth.zip and shards_khatt.zip are in Drive /dist/ or run with '--mixes stroke_only'.")
         synth_ds = ShardDataset(synth_files, vocab, augment=True, label_order="visual")
         khatt_ds = ShardDataset(khatt_files, vocab, augment=True, label_order="visual")
         print(f"Anchor pools: synth={len(synth_ds)} khatt={len(khatt_ds)}")
@@ -653,6 +707,7 @@ def main():
     rp = lambda p: Path(p) if Path(p).is_absolute() else ROOT / p
     if not args.skip_forgetting:
         forget_paths = {"khatt_val_cer": rp(args.khatt_val), "synth_test_cer": rp(args.synth_test)}
+        ensure_shards_available(list(forget_paths.values()))
 
     results_path = rp(args.results)
     results_path.parent.mkdir(parents=True, exist_ok=True)
