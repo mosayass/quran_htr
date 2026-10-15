@@ -1,0 +1,29 @@
+{
+  "target_px": 48.0,
+  "tensor_h": 64.0,
+  "writers": {
+    "writer_01": {
+      "n_samples": 100,
+      "band_height_css": 150.0,
+      "median_ink_extent_css": 78.06,
+      "S_target": 1.4412,
+      "canonical_cer": 25.62,
+      "global_target_cer_unclamped": 25.86,
+      "global_target_cer_clip_safe": 27.65,
+      "samples_clamped_for_clipping": 56,
+      "delta_vs_canonical_clip_safe": 2.03
+    },
+    "writer_02": {
+      "n_samples": 145,
+      "band_height_css": 108.0,
+      "median_ink_extent_css": 92.93,
+      "S_target": 0.8717,
+      "canonical_cer": 37.24,
+      "global_target_cer_unclamped": 35.93,
+      "global_target_cer_clip_safe": 36.4,
+      "samples_clamped_for_clipping": 64,
+      "delta_vs_canonical_clip_safe": -0.84
+    }
+  },
+  "total_eval_secs": 16.9
+}

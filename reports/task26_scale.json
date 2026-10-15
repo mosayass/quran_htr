@@ -1,0 +1,87 @@
+{
+  "device": "cpu",
+  "writers": {
+    "writer_01": {
+      "policy": {
+        "band_height": 150.0,
+        "h_ink_median": 78.193359375,
+        "h_ink_max": 179.45184326171875,
+        "S_target": 1.438741101536156,
+        "S_formula58": 0.757515205913734,
+        "S_clip_exact": 0.6152330001407857,
+        "S_w": 0.6152330001407857
+      },
+      "ink_extent_css_px": {
+        "p10": 57.415280151367185,
+        "median": 78.193359375,
+        "p90": 121.07649841308599,
+        "max": 179.45184326171875
+      },
+      "ink_px_at_zoom1_median(64px tensor)": 33.3625,
+      "clip_bound_percentiles": {
+        "p0": 0.615,
+        "p1": 0.625,
+        "p5": 0.699,
+        "p10": 0.787,
+        "p25": 1.128,
+        "p50": 1.372
+      },
+      "median_ink_extent_by_kind": {
+        "line": 73.6,
+        "word": 79.2
+      },
+      "n_samples_with_clip_bound_below_0.8": 12,
+      "argmin_clip_sample": "sample_line_040",
+      "binding_term": "S_clip_exact",
+      "cer_vs_zoom_multiplier": {
+        "0.5x_canonical": 40.03,
+        "0.6x_canonical": 31.93,
+        "0.7x_canonical": 29.05,
+        "0.8x_canonical": 25.16,
+        "0.9x_canonical": 24.38,
+        "1.0x_canonical": 25.62
+      }
+    },
+    "writer_02": {
+      "policy": {
+        "band_height": 108.0,
+        "h_ink_median": 92.92514038085938,
+        "h_ink_max": 186.31771850585938,
+        "S_target": 0.8716693853570362,
+        "S_formula58": 0.5253123577558299,
+        "S_clip_exact": 0.3620786165284675,
+        "S_w": 0.3620786165284675
+      },
+      "ink_extent_css_px": {
+        "p10": 55.55545654296875,
+        "median": 92.92514038085938,
+        "p90": 126.962890625,
+        "max": 186.31771850585938
+      },
+      "ink_px_at_zoom1_median(64px tensor)": 55.066749855324076,
+      "clip_bound_percentiles": {
+        "p0": 0.362,
+        "p1": 0.421,
+        "p5": 0.539,
+        "p10": 0.64,
+        "p25": 0.756,
+        "p50": 0.895
+      },
+      "median_ink_extent_by_kind": {
+        "line": 126.4,
+        "word": 88.3
+      },
+      "n_samples_with_clip_bound_below_0.8": 50,
+      "argmin_clip_sample": "sample_word_116",
+      "binding_term": "S_clip_exact",
+      "cer_vs_zoom_multiplier": {
+        "0.5x_canonical": 42.03,
+        "0.6x_canonical": 37.62,
+        "0.7x_canonical": 35.18,
+        "0.8x_canonical": 35.27,
+        "0.9x_canonical": 35.83,
+        "1.0x_canonical": 37.24
+      }
+    }
+  }
+}

@@ -54,8 +54,10 @@ MIXES: Dict[str, Tuple[float, float, float]] = {
     "stroke_only": (1.0, 0.0, 0.0),
     "mix_a": (0.5, 0.3, 0.2),
     "mix_b": (0.3, 0.4, 0.3),
+    "mix_0.7": (0.7, 0.18, 0.12),
+    "mix_0.85": (0.85, 0.09, 0.06),
 }
-LC_SIZES = (10, 20, 40, 75)
+LC_SIZES = (10, 20, 40, 56)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -529,7 +531,14 @@ def train_single_run(
     baseline = gate_check(device, subset, step0_cer)
 
     seen_words = words_of(train_samples)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    if getattr(args, "freeze_backbone", False):
+        for p in model.backbone.parameters():
+            p.requires_grad = False
+        for p in model.height_collapse.parameters():
+            p.requires_grad = False
+        print("  [Freeze Backbone] CNN backbone and height collapse frozen; training BiLSTM + head only.")
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=1e-4)
     total_steps = args.epochs * args.steps_per_epoch
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=total_steps, eta_min=args.lr / 10.0)
     ctc = nn.CTCLoss(blank=0, zero_infinity=True)
@@ -551,7 +560,7 @@ def train_single_run(
             loss = ctc(lp, flat.to(device), in_lens, tgt_lens)
             if torch.isfinite(loss):
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+                torch.nn.utils.clip_grad_norm_(trainable_params, 5.0)
                 optimizer.step()
                 loss_sum += loss.item()
             scheduler.step()
@@ -585,18 +594,34 @@ def train_single_run(
                 forgetting[name] = None
     rec = {
         "fold": fold, "mix": mix_name, "weights": list(weights), "seed": seed, "lc_size": lc_size, "device": device,
+        "freeze_backbone": getattr(args, "freeze_backbone", False),
         "epochs": args.epochs, "steps_per_epoch": args.steps_per_epoch, "batch_size": args.batch_size, "lr": args.lr,
         "init_weights": matched_msg, "subset": subset, "n_train": len(train_samples), "n_test": len(test_samples),
         "step0_cer": round(step0_cer, 2), "gate_baseline": baseline, "epoch_log": epoch_log, "train_secs": train_secs,
         "thresholds": thresholds, "result": res, "forgetting": forgetting, "forget_limit": args.forget_limit,
     }
+    if getattr(args, "save_checkpoints_dir", None):
+        out_dir = Path(args.save_checkpoints_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        frozen_tag = "_frozen" if getattr(args, "freeze_backbone", False) else ""
+        lc_tag = f"_n{lc_size}" if lc_size is not None else ""
+        ckpt_fname = f"{fold}_{mix_name}{frozen_tag}_s{seed}{lc_tag}.pt"
+        ckpt_out = out_dir / ckpt_fname
+        torch.save({
+            "model_state": model.state_dict(),
+            "label_order": "visual",
+            "fold": fold, "mix": mix_name, "seed": seed, "lc_size": lc_size,
+            "freeze_backbone": getattr(args, "freeze_backbone", False),
+            "result": res, "thresholds": thresholds,
+        }, ckpt_out)
+        print(f"  Saved checkpoint -> {ckpt_out}")
     print(f"  RESULT {fold}/{mix_name}/s{seed}: CER {step0_cer:.2f}% -> {res['cer_overall']}% "
           f"(lines {res['cer_lines']} / words {res['cer_words']}) forgetting={forgetting}")
     return rec
 
 
 def run_key(r: dict) -> tuple:
-    return (r["fold"], r["mix"], r["seed"], r.get("lc_size"), r["epochs"], r["steps_per_epoch"], r["device"])
+    return (r["fold"], r["mix"], r["seed"], r.get("lc_size"), r["epochs"], r["steps_per_epoch"], r["device"], r.get("freeze_backbone", False))
 
 
 def ensure_shards_available(shards: Sequence[str | Path]):
@@ -672,6 +697,8 @@ def main():
     ap.add_argument("--forget_limit", type=int, default=0, help="0 = full eval sets")
     ap.add_argument("--skip_forgetting", action="store_true")
     ap.add_argument("--skip_verification", action="store_true", help="CER only (no thresholds / 3-state)")
+    ap.add_argument("--freeze_backbone", action="store_true", help="Freeze CNN backbone and train BiLSTM + head only")
+    ap.add_argument("--save_checkpoints_dir", default=None, help="Directory to save final model checkpoints")
     ap.add_argument("--results", default="reports/lowo_runs.jsonl")
     args = ap.parse_args()
 
@@ -718,14 +745,14 @@ def main():
                 done.add(run_key(json.loads(line)))
     print(f"Resuming: {len(done)} runs already recorded in {results_path}")
 
-    # nested learning-curve pool: w02 train+calib (14 groups) in group order
+    # nested learning-curve pool: Fold C pure train pool (56 samples) in group order tested on C_test
     w2_by_id, w2_groups = build_w2_groups()
-    pool_ids = {s["id"] for s in sp["w2_tr"] + sp["w2_cal"]}
-    pool_by_group = {g: [sid for sid in sids if sid in pool_ids] for g, sids in w2_groups.items()}
-    pool_by_group = {g: v for g, v in pool_by_group.items() if v and g != "group_extra"}
+    fc_pool_ids = {s["id"] for s in sp["fc_pure_tr"]}
+    fc_pool_by_group = {g: [sid for sid in sids if sid in fc_pool_ids] for g, sids in w2_groups.items()}
+    fc_pool_by_group = {g: v for g, v in fc_pool_by_group.items() if v and g != "group_extra"}
     for sid in w2_groups.get("group_extra", []):
-        if sid in pool_ids:
-            pool_by_group[f"extra::{sid}"] = [sid]
+        if sid in fc_pool_ids:
+            fc_pool_by_group[f"extra::{sid}"] = [sid]
 
     folds = [f.upper() for f in args.folds]
     for seed in args.seeds:
@@ -738,12 +765,13 @@ def main():
             if "C" in folds:
                 jobs.append(("C", mix, None, sp["fc_pure_tr"], sp["fc_cal"], sp["fc_te"], "C_test"))
             if "CLC" in folds:
-                order = lc_order(pool_by_group, seed)
+                order = lc_order(fc_pool_by_group, seed)
                 for n in args.lc_sizes:
-                    jobs.append(("CLC", mix, n, [w2_by_id[s] for s in order[:n]], [], sp["w2_held"], "LC_test"))
+                    jobs.append(("CLC", mix, n, [w2_by_id[s] for s in order[:n]], [], sp["fc_te"], "C_test"))
         for fold, mix, n, tr, cal, te, subset in jobs:
             probe = {"fold": fold, "mix": mix, "seed": seed, "lc_size": n, "epochs": args.epochs,
-                     "steps_per_epoch": args.steps_per_epoch, "device": device}
+                     "steps_per_epoch": args.steps_per_epoch, "device": device,
+                     "freeze_backbone": getattr(args, "freeze_backbone", False)}
             if run_key(probe) in done:
                 print(f"[skip] already done: {run_key(probe)}")
                 continue

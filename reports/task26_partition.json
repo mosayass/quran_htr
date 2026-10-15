@@ -1,0 +1,130 @@
+{
+  "device": "cpu",
+  "fold_C": {
+    "train(fc_pure_tr)": {
+      "n": 56,
+      "lines": 10,
+      "words": 46,
+      "chars": 451
+    },
+    "calib": {
+      "n": 13,
+      "lines": 0,
+      "words": 13,
+      "chars": 55
+    },
+    "test(fc_te)": {
+      "n": 76,
+      "lines": 10,
+      "words": 66,
+      "chars": 560
+    }
+  },
+  "LC": {
+    "pool(w2_tr+w2_cal)": {
+      "n": 100,
+      "lines": 14,
+      "words": 86,
+      "chars": 756
+    },
+    "test(w2_held)": {
+      "n": 45,
+      "lines": 6,
+      "words": 39,
+      "chars": 310
+    }
+  },
+  "test_overlap": {
+    "LC_test_subset_of_C_test": true,
+    "n_common": 45,
+    "C_test_only": {
+      "n": 31,
+      "lines": 4,
+      "words": 27,
+      "chars": 250
+    }
+  },
+  "train_vs_test_leak": {
+    "C_train&C_test": 0,
+    "C_cal&C_test": 0,
+    "LCpool&LC_test": 0,
+    "LCpool&C_test(samples of C_test that LC trains on)": 31,
+    "C_train&LC_test": 0
+  },
+  "text_dup_and_token_seen": {
+    "C_train->C_test": {
+      "test_samples_with_identical_text_in_train": 0,
+      "of": 76,
+      "tokens": 117,
+      "seen_pct": 17.95
+    },
+    "LCpool->LC_test": {
+      "test_samples_with_identical_text_in_train": 0,
+      "of": 45,
+      "tokens": 69,
+      "seen_pct": 30.43
+    },
+    "C_train->LC_test": {
+      "test_samples_with_identical_text_in_train": 0,
+      "of": 45,
+      "tokens": 69,
+      "seen_pct": 26.09
+    }
+  },
+  "LC_N75_by_seed": {
+    "0": {
+      "n": 75,
+      "lines": 11,
+      "words": 64,
+      "chars": 581,
+      "tokens": 69,
+      "seen_pct": 30.43,
+      "n_groups_touched": 25
+    },
+    "1": {
+      "n": 75,
+      "lines": 11,
+      "words": 64,
+      "chars": 575,
+      "tokens": 69,
+      "seen_pct": 30.43,
+      "n_groups_touched": 23
+    },
+    "2": {
+      "n": 75,
+      "lines": 11,
+      "words": 64,
+      "chars": 576,
+      "tokens": 69,
+      "seen_pct": 26.09,
+      "n_groups_touched": 28
+    },
+    "3": {
+      "n": 75,
+      "lines": 10,
+      "words": 65,
+      "chars": 561,
+      "tokens": 69,
+      "seen_pct": 30.43,
+      "n_groups_touched": 25
+    },
+    "4": {
+      "n": 75,
+      "lines": 11,
+      "words": 64,
+      "chars": 590,
+      "tokens": 69,
+      "seen_pct": 30.43,
+      "n_groups_touched": 24
+    }
+  },
+  "base_cer_pct": {
+    "C_test": 41.25,
+    "LC_test": 39.35,
+    "C_test_only(31)": 43.6,
+    "C_train(56)": 33.26,
+    "C_calib": 29.09,
+    "LC_pool(100)": 36.38
+  },
+  "base_cer_eval_secs": 6.2
+}

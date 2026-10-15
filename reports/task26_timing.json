@@ -1,0 +1,10 @@
+{
+  "device": "cpu",
+  "threads": 6,
+  "steps_timed": 30,
+  "render_s_per_step": 0.019,
+  "fwd_bwd_s_per_step": 0.846,
+  "total_s_per_step": 0.865,
+  "extrapolated_6x1000_stroke_only_min": 86.5,
+  "canonical_eval_C_test_76_secs": 1.5
+}

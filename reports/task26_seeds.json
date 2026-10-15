@@ -1,0 +1,227 @@
+{
+  "fold_B_train_pool": 82,
+  "draws_per_seed_logged": 1600,
+  "per_seed": {
+    "0": {
+      "first_20_sources": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        2,
+        1
+      ],
+      "src_hash": "96cb12cc8a",
+      "stroke_idx_hash": "0e59194c74",
+      "first_5_aug(zoom,width)": [
+        [
+          1.1283,
+          1.8928
+        ],
+        [
+          0.8145,
+          2.3234
+        ],
+        [
+          0.9628,
+          2.3613
+        ],
+        [
+          1.187,
+          2.3157
+        ],
+        [
+          0.8928,
+          1.958
+        ]
+      ],
+      "aug_hash": "544b2ea4b7",
+      "n_stroke_renders": 787,
+      "stroke_ids_distinct_in_800_draws": 82,
+      "pool": 82
+    },
+    "1": {
+      "first_20_sources": [
+        1,
+        2,
+        2,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        1,
+        2,
+        0,
+        0
+      ],
+      "src_hash": "2ee82866ac",
+      "stroke_idx_hash": "81a4d13ece",
+      "first_5_aug(zoom,width)": [
+        [
+          1.2343,
+          2.2485
+        ],
+        [
+          1.1746,
+          2.2984
+        ],
+        [
+          1.2814,
+          2.1549
+        ],
+        [
+          0.9598,
+          2.5482
+        ],
+        [
+          1.0459,
+          2.0416
+        ]
+      ],
+      "aug_hash": "5c1f896bc0",
+      "n_stroke_renders": 776,
+      "stroke_ids_distinct_in_800_draws": 82,
+      "pool": 82
+    },
+    "2": {
+      "first_20_sources": [
+        0,
+        1,
+        2,
+        0,
+        1,
+        0,
+        2,
+        2,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        2,
+        2,
+        0,
+        0
+      ],
+      "src_hash": "042b4638ec",
+      "stroke_idx_hash": "44be718303",
+      "first_5_aug(zoom,width)": [
+        [
+          1.2758,
+          2.5734
+        ],
+        [
+          0.9652,
+          2.0135
+        ],
+        [
+          1.2925,
+          2.1346
+        ],
+        [
+          0.9498,
+          2.2537
+        ],
+        [
+          0.9595,
+          2.0964
+        ]
+      ],
+      "aug_hash": "2044f00630",
+      "n_stroke_renders": 776,
+      "stroke_ids_distinct_in_800_draws": 82,
+      "pool": 82
+    },
+    "3": {
+      "first_20_sources": [
+        2,
+        1,
+        2,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "src_hash": "b572ac10e8",
+      "stroke_idx_hash": "0b010c890c",
+      "first_5_aug(zoom,width)": [
+        [
+          1.2238,
+          2.2924
+        ],
+        [
+          1.2797,
+          1.8795
+        ],
+        [
+          0.8489,
+          2.4156
+        ],
+        [
+          0.8488,
+          1.8026
+        ],
+        [
+          1.045,
+          1.8284
+        ]
+      ],
+      "aug_hash": "dbb2dc5a05",
+      "n_stroke_renders": 799,
+      "stroke_ids_distinct_in_800_draws": 82,
+      "pool": 82
+    }
+  },
+  "all_seeds_distinct_src_hash": true,
+  "all_seeds_distinct_aug_hash": true,
+  "all_seeds_distinct_stroke_idx_hash": true,
+  "exposure": {
+    "mix_a_stroke_draws_per_run": 24000.0,
+    "avg_draws_per_train_sample": 292.7
+  },
+  "fold_B_test": {
+    "n": 100,
+    "ref_chars": 1284,
+    "one_char_error_in_CER_pct": 0.078,
+    "std_0.03pt_in_chars": 0.39
+  }
+}

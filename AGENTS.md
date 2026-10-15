@@ -3,6 +3,13 @@
 > **For Future Antigravity Agents**: This document provides the complete, authoritative state of the **Hafiz Quran HTR** project. Read this before starting any task in a fresh session.
 
 ---
+- Smoke-test every Colab cell (<=2 min tiny run) before a long run; say what was tested.
+- No time estimate without a measured per-run time: total = runs x measured time. Report elapsed times.
+- Long runs checkpoint, log to a file, and resume; stopping must not lose work.
+- Never hand over code that has not been executed; mark RAN / NOT RUN.
+- If a result contradicts an earlier one, stop and report before continuing.
+- No "definitively / mandatory / confirms" without shown evidence; list alternative explanations.
+- One task list at a time.
 
 ## 1. Project Overview & Architecture
 

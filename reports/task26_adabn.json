@@ -1,0 +1,19 @@
+{
+  "device": "cpu",
+  "writers": {
+    "writer_01": {
+      "baseline": 25.62,
+      "adabn_as_implemented(per-sample batch stats, mean of variances)": 34.81,
+      "adabn_pooled_layerwise": 34.35,
+      "adabn_pooled_stats_from_first_half": 55.8,
+      "baseline_on_second_half": 40.62
+    },
+    "writer_02": {
+      "baseline": 37.24,
+      "adabn_as_implemented(per-sample batch stats, mean of variances)": 44.93,
+      "adabn_pooled_layerwise": 46.25,
+      "adabn_pooled_stats_from_first_half": 53.33,
+      "baseline_on_second_half": 43.64
+    }
+  }
+}
