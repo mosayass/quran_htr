@@ -72,22 +72,32 @@ Provenance: Evaluated across independent random seeds on CUDA A100. Base checkpo
 | **B** (w02 → w01) | `mix_a` (0.5 / 0.3 / 0.2) | $n=4$ | 24.77% | **21.32% ± 0.03%** | **0.80% ± 0.10%** | **9.48% ± 0.35%** | **CANONICAL ANCHORED** |
 | **B** (w02 → w01) | `mix_b` (0.3 / 0.4 / 0.3) | $n=4$ | 24.77% | **21.26% ± 0.12%** | **0.79% ± 0.08%** | **9.31% ± 0.31%** | Anchored Replay |
 | **B** (w02 → w01) | `stroke_only` (1.0 / 0.0 / 0.0) | $n=4$ | 24.77% | 25.06% ± 0.25% (Worse) | 8.66% ± 0.25% (Forgetting!) | 19.60% ± 0.29% (Forgetting!) | Unanchored Baseline |
-| **C** (w02 50/50) | `mix_a` (0.5 / 0.3 / 0.2) | $n=4$ | 38.57% | **31.70% ± 0.48%** | **0.80% ± 0.09%** | **9.47% ± 0.28%** | **CANONICAL ANCHORED** |
+| **C** (w02 50/50) | `mix_a` (0.5 / 0.3 / 0.2) | $n=4$ | 38.57% | **31.70% ± 0.48%** | **0.80% ± 0.09%** | **9.47% ± 0.28%** | Reference Baseline |
+| **C** (w02 50/50) | `mix_0.7` (0.7 / 0.18 / 0.12) | $n=2$ | 38.57% | **28.66% ± 0.64%** | **0.95% ± 0.03%** | **9.32% ± 0.01%** | Anchored Replay |
+| **C** (w02 50/50) | `mix_0.85` (0.85 / 0.09 / 0.06) | $n=2$ | 38.57% | **27.14% ± 0.25%** | **1.04% ± 0.03%** | **9.64% ± 0.03%** | **CANONICAL WINNER (Rule Passed)** |
+| **C** (w02 50/50) | `mix_a` (Frozen Backbone) | $n=2$ | 38.57% | 34.29% ± 1.52% | 1.25% ± 0.06% | 9.46% ± 0.12% | Backbone-Frozen (BiLSTM+Head) |
 | **C** (w02 50/50) | `mix_b` (0.3 / 0.4 / 0.3) | $n=3$ | 38.57% | **32.62% ± 0.22%** | **0.79% ± 0.07%** | **9.22% ± 0.23%** | Anchored Replay |
 | **C** (w02 50/50) | `stroke_only` (1.0 / 0.0 / 0.0) | $n=4$ | 38.57% | 24.69% ± 0.59% | 6.57% ± 0.36% (Forgetting!) | 18.63% ± 0.40% (Forgetting!) | Unanchored Baseline |
 
-### 3b. Fold C Personalization Learning Curve (`writer_02` held-out groups, base CER: 35.48%)
+### 3b. Rebuilt Fold C Personalization Learning Curve (Fixed `C_test` $n=76$, Base CER: 38.57%)
 
-| Mix | $N=10$ Samples | $N=20$ Samples | $N=40$ Samples | $N=75$ Samples | Net Personalization Δ ($N=75$) |
+| Mix Config | $N=10$ Samples | $N=20$ Samples | $N=40$ Samples | $N=56$ Samples | Net Personalization Δ ($N=56$) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **`mix_a` (Anchored)** | 31.9% ± 1.0% | 29.0% ± 0.3% | 26.0% ± 0.5% | **23.7% ± 0.2%** | **−11.78 pt** (Pristine general retention) |
-| **`mix_b` (Anchored)** | 34.2% ± 0.6% | 30.5% ± 0.2% | 28.4% ± 1.6% | **25.5% ± 1.6%** | **−9.98 pt** (Pristine general retention) |
-| **`stroke_only` (Unanchored)**| 31.1% ± 0.8% | 26.8% ± 1.6% | 25.0% ± 0.2% | **19.8% ± 0.2%** | **−15.68 pt** (Severe catastrophic forgetting) |
+| **`mix_0.85` (Winner)** | **36.25% ± 1.51%** | **32.06% ± 0.37%** | **30.45% ± 1.39%** | **26.61% ± 0.50%** | **−11.96 pt** (Synth 1.07%, KHATT 9.65%) |
+
+### 3c. Weight Interpolation Benchmark ($W_{\alpha} = (1 - \alpha) W_{\text{base}} + \alpha W_{\text{stroke\_only}}$)
+
+| Alpha ($\alpha$) | Held-Out `C_test` CER ($n=76$) | Synthetic Test CER (Base: 1.20%) | KHATT Val CER (Base: 8.92%) | Retention Rule Status |
+| :---: | :---: | :---: | :---: | :--- |
+| **$\alpha = 0.30$** | **32.68%** | **1.582%** (Δ +0.38 pt) | **9.772%** (Δ +0.85 pt) | **PASSED** (synth $\le +0.5$, khatt $\le +1.5$) |
+| **$\alpha = 0.50$** | 28.93% | 2.223% (Δ +1.02 pt) | 11.190% (Δ +2.27 pt) | FAILS retention rule |
+| **$\alpha = 0.70$** | 25.89% | 3.405% (Δ +2.20 pt) | 13.174% (Δ +4.25 pt) | FAILS retention rule |
 
 *Core Scientific Takeaways:*
-1. **Catastrophic Forgetting Cured**: `stroke_only` blows up general synthetic error from 1.2% to 5.1–8.7% and KHATT error from 9% to 18–20%. Anchored replay (`mix_a` and `mix_b`) completely prevents degradation, maintaining synthetic CER at **0.80%** (outperforming base model) and KHATT at **9.3–9.6%**.
-2. **Anchor Replay Enables Cross-Writer Generalization**: On Fold B, `stroke_only` memorizes and fails to improve (24.77% → 25.06%), whereas `mix_a` drops CER to **21.32% ± 0.03%** (−3.45 pt improvement).
-3. **Personalization Learning Curve**: Personalization on writer_02 scales monotonically: just 10 samples drops CER by 3.6 pt, 20 samples by 6.5 pt, 40 samples by 9.5 pt, and 75 samples by 11.8 pt (anchored).
+1. **`mix_0.85` is the Optimal Personalization Policy**: Anchored stroke weight 0.85 drops C_test CER to **27.14% ± 0.25%** (-4.56 pt better than `mix_a` 31.70%), while strictly preserving synthetic error at **1.04%** (better than base 1.20%) and KHATT val at **9.64%** (well within the +1.5 pt cap).
+2. **Backbone Adaptation is Essential**: Freezing the CNN backbone degrades CER by +2.59 pt (34.29% vs 31.70%), showing that spatial feature tuning is helpful for stroke adaptation.
+3. **Weight Interpolation Sub-Optimal vs Anchoring**: Interpolating stroke-only weights at $\alpha = 0.30$ satisfies retention (32.68% CER), but direct multi-stream anchored training (`mix_0.85`) achieves far superior accuracy (**27.14%**) with superior retention (**1.04%** synth).
+4. **Rebuilt Learning Curve on Fixed C_test**: With zero leakage, personalization scales monotonically from 38.57% base $\to$ 36.25% ($N=10$) $\to$ 32.06% ($N=20$) $\to$ 30.45% ($N=40$) $\to$ **26.61%** ($N=56$).
 
 ### 3c. Superseded INVALID rows (uninitialized-weight run)
 

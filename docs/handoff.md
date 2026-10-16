@@ -8,7 +8,8 @@ State:
 - Partition: locked-test writers + ~30% held-out prompt groups; leave-one-writer-out CV on dev writers.
 - Scale & AdaBN: w02 target fill 48px is ~0.87, giving 35.93% (unclamped) and 36.40% (clip-safe) vs 37.24% canonical; w01 is 25.86% (unclamped) and 27.65% (clip-safe) vs 25.62% canonical. AdaBN dropped. Stratified post-FT CER on w02 (lowo_fold_A.pt): seen words 35.33% vs unseen 41.28% (overall 36.96%).
 - Base CERs reconciled: C_test 41.25% / LC_test 39.35% (CPU) vs 38.57% / 35.48% (CUDA CuDNN FP32 on A100) are identical samples from configs/gate_baselines.json differing only by hardware convolution precision.
-- Colab sweep tools: train_twofold_lowo.py upgraded with mixes {mix_0.7, mix_0.85}, --freeze_backbone, --save_checkpoints_dir, and CLC on fixed C_test (n=76); eval_weight_interpolation.py prepared.
+- Personalization & sweep (Task 2.27): mix_0.85 is the optimal policy (27.14% ± 0.25% C_test CER, synth 1.04%, KHATT 9.64%), outperforming mix_a (31.70%) by -4.56 pt while satisfying retention rules. Backbone-frozen is inferior (34.29%). Rebuilt LC on C_test scales monotonically: 36.25% (N=10) -> 32.06% (N=20) -> 30.45% (N=40) -> 26.61% (N=56). Weight interpolation at alpha=0.3 achieves 32.68% CER but is inferior to direct anchored training. Lexical gap on C: Seen 24.66% vs Unseen 29.82% (-5.16 pt).
 
-Open issues: Run Cell 1a in Google Colab to confirm GPU s/step, then launch sweep (Item 2) and learning curve (Item 3) via Cell 1b.
+Open issues: Deploy mix_0.85 as production personalization policy; recruit dev writers 03+; freeze thresholds on multi-writer dataset.
+
 
