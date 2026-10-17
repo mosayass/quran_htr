@@ -106,15 +106,27 @@ def evaluate_test_verification(model: nn.Module, test_samples: List[dict], vocab
 def compute_thresholds(true_llrs: List[float], corr_llrs: List[float], rule_name: str) -> Tuple[float, float]:
     """
     Candidate rules:
+    - 'conditional_outlier_p5': Task 2.32 conditional outlier trim (min < -1.50 or min < p25 - 1.5*IQR) + ceiling min(t_acc, -0.05)
+    - 'trimmed_outlier_p5': unconditional drop min 1 outlier if len < 20, then p5
     - 'old_p5': np.percentile(true_llrs, 5) with min clamp t_acc - 0.20
-    - 'trimmed_outlier_p5': drop min 1 outlier if len < 20, then p5
-    - 'p15_unclamped': t_acc = percentile(true, 15), t_wrg = percentile(corr, 90) (no artificial clamp if monotonic)
-    - 'trimmed_p10': drop min 1 outlier if len < 20, t_acc = percentile(true_clean, 10)
-    - 'iqr_clipped': median - 1.0 * IQR
     """
     t_wrg_raw = float(np.percentile(corr_llrs, 90)) if corr_llrs else -0.95
 
-    if rule_name == "old_p5":
+    if rule_name == "conditional_outlier_p5":
+        sorted_llrs = sorted(true_llrs)
+        p25 = float(np.percentile(sorted_llrs, 25))
+        p75 = float(np.percentile(sorted_llrs, 75))
+        iqr = p75 - p25
+        min_val = sorted_llrs[0] if sorted_llrs else 0.0
+        is_severe_outlier = (min_val < -1.50) or (iqr > 0 and min_val < p25 - 1.5 * iqr)
+        if len(sorted_llrs) < 20 and is_severe_outlier:
+            clean = sorted_llrs[1:]
+        else:
+            clean = sorted_llrs
+        t_acc_raw = float(np.percentile(clean, 5))
+        t_acc = min(t_acc_raw, -0.05)
+        t_wrg = min(t_acc - 0.20, t_wrg_raw)
+    elif rule_name == "old_p5":
         t_acc = float(np.percentile(true_llrs, 5))
         t_wrg = min(t_acc - 0.20, t_wrg_raw)
     elif rule_name == "trimmed_outlier_p5":
@@ -126,7 +138,6 @@ def compute_thresholds(true_llrs: List[float], corr_llrs: List[float], rule_name
         t_acc = float(np.percentile(clean, 10))
         t_wrg = min(t_acc - 0.20, t_wrg_raw)
     elif rule_name == "p15_safe":
-        # p15 targets rank ~2 for N=13-14, safe against single outlier; clamp maintains monotonicity
         t_acc = float(np.percentile(true_llrs, 15))
         t_wrg = min(t_acc - 0.20, t_wrg_raw)
     elif rule_name == "iqr_clipped":
@@ -164,7 +175,7 @@ def main():
         ("C4", sp["w4_fc_cal"], sp["w4_fc_te"], "writer_04"),
     ]
 
-    rules_to_test = ["old_p5", "trimmed_outlier_p5", "trimmed_p10", "p15_safe"]
+    rules_to_test = ["conditional_outlier_p5", "old_p5", "trimmed_outlier_p5"]
 
     print("\n" + "=" * 80)
     print("STEP 1: SORTED CALIBRATION LLR SCORES ACROSS FOLDS & SEEDS")

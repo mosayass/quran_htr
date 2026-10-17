@@ -441,7 +441,18 @@ def recalibrate_thresholds(model: nn.Module, calib_samples: List[dict], vocab: V
                     corr_llrs.append(w_eval["llr"])
     if not true_llrs:
         return -0.60, -0.95
-    t_acc = float(np.percentile(true_llrs, 5))
+    sorted_llrs = sorted(true_llrs)
+    p25 = float(np.percentile(sorted_llrs, 25))
+    p75 = float(np.percentile(sorted_llrs, 75))
+    iqr = p75 - p25
+    min_val = sorted_llrs[0] if sorted_llrs else 0.0
+    is_severe_outlier = (min_val < -1.50) or (iqr > 0 and min_val < p25 - 1.5 * iqr)
+    if len(sorted_llrs) < 20 and is_severe_outlier:
+        clean = sorted_llrs[1:]
+    else:
+        clean = sorted_llrs
+    t_acc_raw = float(np.percentile(clean, 5))
+    t_acc = min(t_acc_raw, -0.05)
     t_wrg_raw = float(np.percentile(corr_llrs, 90)) if corr_llrs else t_acc - 0.35
     t_wrg = min(t_acc - 0.20, t_wrg_raw)  # monotonic: t_wrong <= t_accept
     return round(t_acc, 4), round(t_wrg, 4)
