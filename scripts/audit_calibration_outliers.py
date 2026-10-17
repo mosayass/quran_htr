@@ -28,16 +28,21 @@ from verify_ref import verify_reference
 from task_2_17_suite import apply_corruption
 
 
-def find_checkpoint(fold: str, seed: int, candidate_dirs: List[Path]) -> Path:
-    fnames = [
-        f"{fold}_mix_0.85_s{seed}.pt",
-        f"{fold}_mix_0.85_s{seed}_n56.pt" if fold == "CLC" else None,
-    ]
-    for d in candidate_dirs:
-        for fn in fnames:
-            if fn and (d / fn).exists():
-                return d / fn
-    raise FileNotFoundError(f"Checkpoint for fold={fold} seed={seed} not found in {candidate_dirs}")
+def get_checkpoint_path(fold: str, seed: int, sweep27_dir: Path, sweep28_dir: Path) -> Path:
+    """Exact known locations from Task 2.27 and Task 2.28 runs on Google Drive."""
+    target_dir = sweep27_dir if fold == "C" else sweep28_dir
+    p = target_dir / f"{fold}_mix_0.85_s{seed}.pt"
+    if p.exists():
+        return p
+    # Fallback to local copy if running locally
+    local_p = ROOT / "checkpoints" / target_dir.name / f"{fold}_mix_0.85_s{seed}.pt"
+    if local_p.exists():
+        return local_p
+    raise FileNotFoundError(
+        f"Checkpoint not found at exact path: {p} (or local fallback: {local_p}).\n"
+        f"Please verify the exact checkpoint directory."
+    )
+
 
 
 def extract_calib_llrs(model: nn.Module, calib_samples: List[dict], vocab: Vocabulary,
@@ -138,11 +143,10 @@ def compute_thresholds(true_llrs: List[float], corr_llrs: List[float], rule_name
 def main():
     ap = argparse.ArgumentParser(description="Audit outlier-safe calibration rules across Folds C, C3, C4")
     ap.add_argument("--device", default="auto")
-    ap.add_argument("--checkpoint_dirs", nargs="+", default=[
-        "checkpoints/sweep28", "checkpoints/sweep27",
-        "/content/drive/MyDrive/quran_htr_writer_checkpoints/sweep28",
-        "/content/drive/MyDrive/quran_htr_writer_checkpoints/sweep27",
-    ])
+    ap.add_argument("--sweep27_dir", default="/content/drive/MyDrive/quran_htr_writer_checkpoints/sweep27",
+                    help="Directory containing C_mix_0.85_s{0,1}.pt")
+    ap.add_argument("--sweep28_dir", default="/content/drive/MyDrive/quran_htr_writer_checkpoints/sweep28",
+                    help="Directory containing C3_mix_0.85_s*.pt and C4_mix_0.85_s*.pt")
     args = ap.parse_args()
 
     device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
@@ -151,7 +155,8 @@ def main():
     vocab = Vocabulary.load(ROOT / "vocab.json")
     sp = T.load_dev_splits()
 
-    candidate_dirs = [Path(p) if Path(p).is_absolute() else ROOT / p for p in args.checkpoint_dirs]
+    sweep27_dir = Path(args.sweep27_dir) if Path(args.sweep27_dir).is_absolute() else ROOT / args.sweep27_dir
+    sweep28_dir = Path(args.sweep28_dir) if Path(args.sweep28_dir).is_absolute() else ROOT / args.sweep28_dir
 
     folds_data = [
         ("C", sp["fc_cal"], sp["fc_te"], "writer_02"),
@@ -171,7 +176,7 @@ def main():
         calib_scores_summary[fold] = {}
         for seed in (0, 1):
             try:
-                ckpt_p = find_checkpoint(fold, seed, candidate_dirs)
+                ckpt_p = get_checkpoint_path(fold, seed, sweep27_dir, sweep28_dir)
             except FileNotFoundError as e:
                 print(f"[Warning] {e}")
                 continue
