@@ -183,7 +183,7 @@ def main():
 
             ckpt = torch.load(ckpt_p, map_location=device)
             state = ckpt["model_state"] if "model_state" in ckpt else ckpt
-            model = CRNN(num_chars=len(vocab)).to(device)
+            model = CRNN(vocab_size=len(vocab)).to(device)
             model.load_state_dict(state)
 
             true_llrs, corr_llrs, detailed = extract_calib_llrs(model, cal_samples, vocab, device=device)
@@ -224,7 +224,7 @@ def main():
                 # Re-load model for test eval
                 ckpt = torch.load(info["ckpt"], map_location=device)
                 state = ckpt["model_state"] if "model_state" in ckpt else ckpt
-                model = CRNN(num_chars=len(vocab)).to(device)
+                model = CRNN(vocab_size=len(vocab)).to(device)
                 model.load_state_dict(state)
 
                 res = evaluate_test_verification(model, te_samples, vocab, t_acc, t_wrg, device=device)
