@@ -1,0 +1,32 @@
+{
+  "writer_03": {
+    "counts": {
+      "total": 148,
+      "train_pool": 70,
+      "pure_train": 56,
+      "calib": 14,
+      "held_out_test": 78
+    },
+    "zero_shot_base_cpu": {
+      "full_cer": 22.32,
+      "full_wer": 60.34,
+      "test_cer": 18.55,
+      "test_wer": 56.91
+    }
+  },
+  "writer_04": {
+    "counts": {
+      "total": 152,
+      "train_pool": 69,
+      "pure_train": 56,
+      "calib": 13,
+      "held_out_test": 83
+    },
+    "zero_shot_base_cpu": {
+      "full_cer": 17.31,
+      "full_wer": 51.02,
+      "test_cer": 18.37,
+      "test_wer": 53.79
+    }
+  }
+}
