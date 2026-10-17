@@ -2,44 +2,64 @@
   "devices": {
     "cpu": {
       "A_test": {
-        "cer": 37.242,
+        "cer": 36.3977,
         "repeats": [
-          37.242,
-          37.242,
-          37.242
+          36.3977,
+          36.3977,
+          36.3977
         ],
         "spread": 0.0,
         "n": 145
       },
       "B_test": {
-        "cer": 25.6231,
+        "cer": 24.7664,
         "repeats": [
-          25.6231,
-          25.6231,
-          25.6231
+          24.7664,
+          24.7664,
+          24.7664
         ],
         "spread": 0.0,
         "n": 100
       },
       "C_test": {
-        "cer": 41.25,
+        "cer": 38.5714,
         "repeats": [
-          41.25,
-          41.25,
-          41.25
+          38.5714,
+          38.5714,
+          38.5714
         ],
         "spread": 0.0,
         "n": 76
       },
       "LC_test": {
-        "cer": 39.3548,
+        "cer": 35.4839,
         "repeats": [
-          39.3548,
-          39.3548,
-          39.3548
+          35.4839,
+          35.4839,
+          35.4839
         ],
         "spread": 0.0,
         "n": 45
+      },
+      "C3_test": {
+        "cer": 21.2479,
+        "repeats": [
+          21.2479,
+          21.2479,
+          21.2479
+        ],
+        "spread": 0.0,
+        "n": 78
+      },
+      "C4_test": {
+        "cer": 17.2524,
+        "repeats": [
+          17.2524,
+          17.2524,
+          17.2524
+        ],
+        "spread": 0.0,
+        "n": 83
       }
     },
     "cuda": {
@@ -82,10 +102,32 @@
         ],
         "spread": 0.0,
         "n": 45
+      },
+      "C3_test": {
+        "cer": 21.2479,
+        "repeats": [
+          21.2479,
+          21.2479,
+          21.2479
+        ],
+        "spread": 0.0,
+        "n": 78
+      },
+      "C4_test": {
+        "cer": 17.2524,
+        "repeats": [
+          17.2524,
+          17.2524,
+          17.2524
+        ],
+        "spread": 0.0,
+        "n": 83
       }
     }
   },
   "tolerance_pt": 1.0,
-  "checkpoint": "best.pt",
-  "note": "Independent canonical-eval baselines of the UNTRAINED base checkpoint, per device."
+  "checkpoint": "checkpoints/best.pt",
+  "checkpoint_sha256": "D9F63734B8BEBF994E77E20D6B599EFD5AAEF23181511D21336DE58A02E94368",
+  "superseded_sha256": "E5C88C3181D7BC52540E8E947EF9CE8F942CAC3447C6520A3E2F71BE717E9475",
+  "note": "Independent canonical-eval baselines of the UNTRAINED base checkpoint (D9F63734...). CPU and CUDA reproduce identical baselines (38.57% on C_test). The previous 41.25% CPU entry was caused by the superseded checkpoint (E5C88C31...), not hardware drift."
 }

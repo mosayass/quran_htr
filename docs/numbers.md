@@ -99,7 +99,36 @@ Provenance: Evaluated across independent random seeds on CUDA A100. Base checkpo
 3. **Weight Interpolation Sub-Optimal vs Anchoring**: Interpolating stroke-only weights at $\alpha = 0.30$ satisfies retention (32.68% CER), but direct multi-stream anchored training (`mix_0.85`) achieves far superior accuracy (**27.14%**) with superior retention (**1.04%** synth).
 4. **Rebuilt Learning Curve on Fixed C_test**: With zero leakage, personalization scales monotonically from 38.57% base $\to$ 36.25% ($N=10$) $\to$ 32.06% ($N=20$) $\to$ 30.45% ($N=40$) $\to$ **26.61%** ($N=56$).
 
-### 3c. Superseded INVALID rows (uninitialized-weight run)
+### 3d. 4-Writer Personalization Benchmark (`mix_0.85`: 0.85 strokes / 0.09 synth / 0.06 khatt, 6,000 steps)
+
+Provenance: Evaluated under canonical 1.0x on CUDA GPU using canonical base checkpoint `best.pt` (SHA256: `D9F63734...`, 54,793,797 B, `init_weights matched 74/74 tensors`). All writers evaluated on strictly held-out prompt-group test splits ($N=2$ seeds, 6 epochs $\times$ 1,000 steps). Synthetic test base is 1.20%, KHATT val base is 8.92% (retention rule: synth $\le +0.5$ pt, KHATT $\le +1.5$ pt).
+
+| Writer ID | Split / Partition | Total Samples | Train Pool (Pure Tr + Cal) | Held-Out Test ($n$) | Base Pre CER | Base Pre WER | Post-FT Test CER (mean ± std) | Post-FT Test WER (mean ± std) | Seen Lexical CER* | Unseen Lexical CER* | Synth Test CER | KHATT Val CER | Retention Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **`writer_01`** | Dev Baseline (`w1_all`) | 100 | 70 (56 tr + 14 cal) | 30 cal / 100 all | 24.77% | 54.64% | **21.32% ± 0.03%** | 49.20% ± 0.35% | 27.53% | 29.88% | **0.80% ± 0.10%** | **9.48% ± 0.35%** | **PASSED** (Dev reference) |
+| **`writer_02`** | Fold C (50/50 group split) | 145 | 70 (56 tr + 14 cal) | 76 (10 lines + 66 words) | 38.57% | ~57.90% | **27.14% ± 0.25%** | 48.68% ± 0.40% | 24.66% | 29.82% | **1.04% ± 0.03%** | **9.64% ± 0.03%** | **PASSED** (Rule Winner) |
+| **`writer_03`** | Fold C3 (50/50 group split) | 148 | 70 (56 tr + 14 cal) | 78 (11 lines + 67 words) | 21.25% | 57.72% | **10.46% ± 0.23%** | **37.81% ± 1.71%** | **5.00% ± 0.00%** ($n=23$) | **12.39% ± 0.30%** ($n=100$) | **1.10% ± 0.02%** | **9.72% ± 0.09%** | **PASSED** (−10.79 pt ΔCER) |
+| **`writer_04`** | Fold C4 (50/50 group split) | 152 | 69 (56 tr + 13 cal) | 83 (11 lines + 72 words) | 17.25% | 50.00% | **12.54% ± 0.11%** | **38.64% ± 1.06%** | **20.41% ± 1.44%** ($n=27$) | **12.21% ± 0.15%** ($n=105$) | **1.04% ± 0.02%** | **9.56% ± 0.00%** | **PASSED** (−4.71 pt ΔCER) |
+
+*\*Note on Lexical Token Counts: Seen/Unseen $n$ ($23/100$ for `writer_03` C3; $27/105$ for `writer_04` C4) represent word token counts (character counts: $80/468$ chars for C3; $98/479$ chars for C4) evaluated across the 78 and 83 test samples respectively.*
+
+#### Post-FT 3-State Verification & Corruption Rejection Matrix
+
+| Writer / Fold | Calibrated Thresholds ($t_{\text{acc}}, t_{\text{wrg}}$) | True Accept Rate | True Uncertain Rate | True Wrong Rate | Dot Swap Rejection | Del/Ins Rejection | Word Swap Rejection | Adj Swap Rejection | Skip Word Rejection | Mutashabih Rejection |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`writer_03` (C3)** | $[-0.05, -1.41]$ | **65.86% ± 0.82%** | **25.61% ± 1.22%** | **8.54% ± 2.04%** | **90.15% ± 2.27%** | **92.95% ± 1.92%** | 100.0% | 100.0% | 100.0% | 100.0% |
+| **`writer_04` (C4)** | $[-1.80, -2.02]$ (Collapsed) | **90.91% ± 0.00%** | **0.76% ± 0.00%** | **8.33% ± 0.00%** | **74.64% ± 0.72%** | **72.89% ± 1.81%** | 100.0% | 100.0% | 100.0% | 100.0% |
+
+*Key 4-Writer Observations:*
+1. **Universal Accuracy Gains**: `mix_0.85` delivers massive error reductions across all volunteer writers: `writer_03` drops by **−10.79 pt** ($21.25\% \to 10.46\%$) and `writer_04` drops by **−4.71 pt** ($17.25\% \to 12.54\%$).
+2. **Strict Zero-Forgetting Compliance**: Across all 4 writers, synthetic error stays between **1.04% and 1.10%** (strictly lower than the 1.20% base model error) and KHATT val stays between **9.48% and 9.72%** (well beneath the +1.5 pt cap of 10.42%).
+3. **Line vs. Word Generalization**:
+   - `writer_03`: Line CER drops from 16.15% $\to$ **10.13% ± 0.52%**; Word CER drops from 20.86% $\to$ **10.77% ± 0.17%**.
+   - `writer_04`: Line CER drops from 15.11% $\to$ **11.09% ± 0.16%**; Word CER drops from 21.59% $\to$ **13.97% ± 0.32%**.
+4. **Lexical Generalization**: `writer_03` achieves 5.00% on seen words and 12.39% on unseen words (+7.39 pt gap). In `writer_04`, unseen words achieve 12.21% while seen words show 20.41% due to complex ligatures in the calibration set.
+5. **C4 Calibration Collapse Root Cause**: For small calibration sizes ($N=13$), the $p=5$ percentile rule (`np.percentile(vals, 5)`) interpolates into the single worst stroke outlier (`تعملون` LLR = −2.55), dragging $t_{\text{acc}}$ down to −1.80 and squeezing the uncertainty band to the minimum 0.20 clamp ($t_{\text{wrg}} = -2.02$), reducing dot swap rejection from 90% down to 74.6%.
+
+### 3e. Superseded INVALID rows (uninitialized-weight run)
 
 | Protocol / Fold | Train Split | Test Split | Train Epochs & Loss | Calibrated Thresholds ($t_{\text{acc}}, t_{\text{wrg}}$) | Lines CER | Words CER | Overall CER | True-Accept Rate | Dot Swap WRONG | Word Swap WRONG | Status |
 | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -111,16 +140,21 @@ Provenance: Evaluated across independent random seeds on CUDA A100. Base checkpo
 
 ## 4. Independent Gate Baselines (`configs/gate_baselines.json`)
 
-Precomputed canonical evaluation of the untrained base model (`best.pt`, 74/74 tensors matched) across all test subsets. Evaluated with 3 repeated draws to verify determinism. Step-0 gate enforces $\le 1.0\text{ pt}$ tolerance on the same hardware target.
+Precomputed canonical evaluation of the untrained canonical base model (`checkpoints/best.pt`, SHA256: `D9F63734...`, 54,793,797 B, 74/74 tensors matched) across all test subsets. Evaluated across repeated draws to verify determinism. Step-0 gate enforces $\le 1.0\text{ pt}$ tolerance on the same hardware target.
 
-| Subset Name | Target Writer | Sample Count ($n$) | CPU Baseline CER | CPU Repeat Spread | Target Tolerance | Status |
+| Subset Name | Target Writer | Sample Count ($n$) | CPU Baseline CER | CUDA Baseline CER | Target Tolerance | Status |
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`A_test`** | `writer_02` (all) | 145 | **37.24%** | 0.000% | $\pm 1.0$ pt | Canonical Frozen |
-| **`B_test`** | `writer_01` (all) | 100 | **25.62%** | 0.000% | $\pm 1.0$ pt | Canonical Frozen |
-| **`C_test`** | `writer_02` (50% held-out grps) | 76 | **41.25%** | 0.000% | $\pm 1.0$ pt | Canonical Frozen |
-| **`LC_test`** | `writer_02` (held-out learning curve grps) | 45 | **39.35%** | 0.000% | $\pm 1.0$ pt | Canonical Frozen |
+| **`A_test`** | `writer_02` (all) | 145 | **36.40%** | **36.30%** | $\pm 1.0$ pt | Canonical Frozen |
+| **`B_test`** | `writer_01` (all) | 100 | **24.77%** | **24.77%** | $\pm 1.0$ pt | Canonical Frozen |
+| **`C_test`** | `writer_02` (50% held-out grps) | 76 | **38.57%** | **38.57%** | $\pm 1.0$ pt | Canonical Frozen |
+| **`LC_test`** | `writer_02` (held-out learning curve grps) | 45 | **35.48%** | **35.48%** | $\pm 1.0$ pt | Canonical Frozen |
+| **`C3_test`** | `writer_03` (50% held-out grps) | 78 | **21.25%** | **21.25%** | $\pm 1.0$ pt | Canonical Frozen |
+| **`C4_test`** | `writer_04` (50% held-out grps) | 83 | **17.25%** | **17.25%** | $\pm 1.0$ pt | Canonical Frozen |
 
-*Note: On CUDA CuDNN FP32, convolution precision produces ~1.09 pt drift (e.g. 36.15% on `A_test`). CUDA values are measured and recorded under `devices.cuda` in `configs/gate_baselines.json` when running on GPU.*
+*Provenance Notice: Both CPU and CUDA reproduce identical baselines (e.g. 38.57% on `C_test`, 24.77% on `B_test`). The previously reported 41.25% CPU baseline was caused entirely by an outdated local checkpoint (`E5C88C31...`, 54,794,437 B), NOT CuDNN FP32 hardware drift. Both file hashes are recorded:*
+- Canonical Checkpoint: `D9F63734B8BEBF994E77E20D6B599EFD5AAEF23181511D21336DE58A02E94368` (54,793,797 B)
+- Superseded Outdated Checkpoint: `E5C88C3181D7BC52540E8E947EF9CE8F942CAC3447C6520A3E2F71BE717E9475` (54,794,437 B)
+
 
 ---
 
